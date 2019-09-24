@@ -1,0 +1,123 @@
+---
+title: "Kidiq"
+author: "Juan felipe Múnera Vergara"
+date: "9/20/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Carga de los datos
+
+```{r}
+library(haven)
+setwd("C:/Users/JF_Mra/Documents/Unal S6/Modelos_Jerarquicos/Book_Data")
+kidiq <- read_dta("child.iq/kidiq.dta")
+attach(kidiq)
+
+```
+
+## 1) Explore la base de datos kidiq. ¿Cuántas variables y cuántas observaciones tiene la base de datos?
+5 variables y 434 observaciones
+
+## 2) ¿Cuántas de las covariables tienen información sobre la madre del niño?
+4
+
+## 3) Replique en su computador las figuras 3.1, 3.2 y 3.3.
+
+```{r}
+library("arm")
+
+
+## Plot Figure 3.1
+fit.0 <- lm (kid_score ~ mom_hs)
+plot(x = jitter(mom_hs, factor=0.15), y=kid_score, xlab="Mother completed high school", 
+  ylab="Child test score",pch=20, xaxt="n", yaxt="n")
+axis (1, seq(0,1))
+axis (2, c(20,60,100,140))
+abline (fit.0)
+
+## Plot Figure 3.2
+fit.1 <- lm (kid_score ~ mom_iq)
+
+plot(mom_iq,kid_score, xlab="Mother IQ score", 
+  ylab="Child test score",pch=20, xaxt="n", yaxt="n")
+axis (1, c(80,100,120,140))
+axis (2, c(20,60,100,140))
+abline (fit.1)
+
+# Figure 3.3
+fit.2 <- lm (kid_score ~ mom_hs + mom_iq)
+plot(mom_iq,kid_score, xlab="Mother IQ score", 
+  ylab="Child test score",pch=20, xaxt="n", yaxt="n", type="n")
+curve (coef(fit.2)[1] + coef(fit.2)[2] + coef(fit.2)[3]*x, add=TRUE, col="gray")
+curve (coef(fit.2)[1] + coef(fit.2)[3]*x, add=TRUE)
+points (mom_iq[mom_hs==0], kid_score[mom_hs==0], pch=19)
+points (mom_iq[mom_hs==1], kid_score[mom_hs==1], col="gray", pch=19)
+axis (1, c(80,100,120,140))
+axis (2, c(20,60,100,140))
+```
+
+
+## 4) Incluya una leyenda con legend() para mejorar la figura 3.3.
+```{r}
+plot(mom_iq,kid_score, xlab="Mother IQ score", 
+  ylab="Child test score",pch=20, xaxt="n", yaxt="n", type="n")
+curve (coef(fit.2)[1] + coef(fit.2)[2] + coef(fit.2)[3]*x, add=TRUE, col="gray")
+curve (coef(fit.2)[1] + coef(fit.2)[3]*x, add=TRUE)
+points (mom_iq[mom_hs==0], kid_score[mom_hs==0], pch=19)
+points (mom_iq[mom_hs==1], kid_score[mom_hs==1], col="gray", pch=19)
+axis (1, c(80,100,120,140))
+axis (2, c(20,60,100,140))
+```
+
+## 5) ¿Cuál de los tres modelos presenta mayor R2?
+```{r}
+summary(fit.0)$r.squared
+summary(fit.1)$r.squared
+summary(fit.2)$r.squared
+```
+El modelo 3
+
+## 6) Calcule la correlación entre la variable respuesta (y) y los valores estimados (y^), es decir, calcule cor(y,y^) para los tres modelos. ¿Cuál de los presenta la mayor correlación?
+```{r}
+cor(fit.0$fitted.values, kidiq$kid_score)
+cor(fit.1$fitted.values, kidiq$kid_score)
+cor(fit.2$fitted.values, kidiq$kid_score)
+```
+EL tercer modelo.
+
+## 7) Observe la figura 3.4 del libro, ¿en qué se diferencia la figura 3.4(a) de la figura 3.4(b)? Rta: en nada, son la misma, why?
+
+```{r}
+fit <- lm (kid_score ~ mom_hs + mom_iq + mom_hs:mom_iq)
+display (fit)
+
+## Figure 3.4 (a)
+plot(mom_iq,kid_score, xlab="Mother IQ score", 
+  ylab="Child test score",pch=20, xaxt="n", yaxt="n", type="n")
+curve (coef(fit)[1] + coef(fit)[2] + (coef(fit)[3] + coef(fit)[4])*x, add=TRUE, col="gray")
+curve (coef(fit)[1] + coef(fit)[3]*x, add=TRUE)
+points (mom_iq[mom_hs==0], kid_score[mom_hs==0], pch=20)
+points (mom_iq[mom_hs==1], kid_score[mom_hs==1], col="gray", pch=20)
+axis (1, c(80,100,120,140))
+axis (2, c(20,60,100,140))
+
+## Figure 3.4 (b)
+
+plot(mom_iq,kid_score, xlab="Mother IQ score", 
+  ylab="Child test score",pch=20, type="n", xlim=c(0,150), ylim=c(0,150))
+curve (coef(fit)[1] + coef(fit)[2] + (coef(fit)[3] + coef(fit)[4])*x, add=TRUE, col="gray")
+curve (coef(fit)[1] + coef(fit)[3]*x, add=TRUE)
+points (mom_iq[mom_hs==0], kid_score[mom_hs==0], pch=20)
+points (mom_iq[mom_hs==1], kid_score[mom_hs==1], col="gray", pch=20)
+
+```
+En la figura B se amplia el eje X para que se pueda ver la interpretación del intercepto, 
+
+
+## 8 Replique la figura 3.4 del libro pero incluya una leyenda con legend() para mejorarla.
+
+## 9) Incluya las ecuaciones de las rectas de la figura 3.4(b) en la misma figura, use la siguiente ayuda de stackoverflow https://stackoverflow.com/questions/17032300/add-an-equation-into-scatter-plots-in-r.
