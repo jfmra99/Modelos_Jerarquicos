@@ -1,0 +1,93 @@
+---
+title: "Taller 4"
+author: "Juan felipe Múnera Vergara"
+date: "9/27/2019"
+output: pdf_document
+---
+
+## Carga de datos
+```{r}
+library(haven)
+setwd("C:/Users/JF_Mra/Documents/Unal S6/Modelos_Jerarquicos/Book_Data")
+kidiq <- read_dta("child.iq/kidiq.dta")
+attach(kidiq)
+library("arm")
+```
+
+## 1) Ajuste el modelo anterior en R y obtenga la tabla de resumen. Los resultados deben coincidir con los mostrados al inicio de la sección 4.2 del libro.
+
+```{r}
+model <- lm(kid_score ~ mom_iq*mom_hs)
+display(model)
+```
+
+## 2)
+```{r}
+predict(model,data.frame(mom_iq=100, mom_hs = 1))
+predict(model,data.frame(mom_iq=100, mom_hs = 0))
+```
+Porque dicho valor es en el caso de que mom_iq=0
+
+## 3) ¿Cuáles son las medias de las variables momHs y momIq?
+```{r}
+apply(kidiq[,c(2,3)], 2, mean)
+```
+
+## 4) Centre las variables MOM_HS y MOMIQ:
+```{r}
+centered_df <- apply(kidiq[,c(2,3)], 2, function(x) x-mean(x))
+summary(centered_df)[c(1,6),]
+```
+
+## 5) Si una madre tiene momIq=120, ¿cuál será el valor de momIqt en la escala transformada?
+
+```{r}
+120 - mean(mom_iq)
+```
+
+## 6) Si una madre tiene momHs ransformado de 0.2143, ¿cuál será el valor de momHs en la escala normal?
+1, termino HS
+
+## 7) Vuelva a ajustar el modelo de arriba y obtenga la tabla de resumen.
+```{r}
+centered_df <- (as.data.frame(centered_df))
+centered_df$kid_score <- kid_score
+c_model <- lm(kid_score ~ mom_iq*mom_hs,data = centered_df)
+display(c_model)
+```
+
+## 8)
+```{r}
+predict(c_model,data.frame(mom_iq=100-mean(mom_iq), mom_hs = 1-mean(mom_hs)))
+predict(c_model,data.frame(mom_iq=100-mean(mom_iq), mom_hs = 0-mean(mom_hs)))
+```
+Porque 100 es la media de mom_iq, que es donde esta la interpretabilidad de el Beta.
+
+## 9)
+```{r}
+predict(c_model,data.frame(mom_iq=120-mean(mom_iq), mom_hs = 1-mean(mom_hs)))
+predict(c_model,data.frame(mom_iq=120-mean(mom_iq), mom_hs = 0-mean(mom_hs)))
+```
+Porque ahora no esta sobre la media.
+
+## 10)
+```{r}
+score_a <- predict(c_model,data.frame(mom_iq=11, mom_hs = 0))
+score_b <- predict(c_model,data.frame(mom_iq=10, mom_hs = 0))
+score_a
+score_b
+score_a - score_b
+```
+
+Porque mom_hs transformado tiene su media en 0, por lo que la diferencia entre los valores para mom_iq transformados en a y b aumentara exactamente el valor de Beta por cada unidad.
+
+## 11)
+
+```{r}
+score_a <- predict(c_model,data.frame(mom_iq=11, mom_hs = 0.2143))
+score_b <- predict(c_model,data.frame(mom_iq=10, mom_hs = 0.2143))
+score_a
+score_b
+score_a - score_b
+```
+Porque ahora no estamos tomado el valor medio de mom_hs

@@ -1,0 +1,61 @@
+---
+title: "Taller5"
+author: "Juan felipe Múnera Vergara"
+date: "10/2/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Carga de datos
+
+```{r}
+library("arm")
+library(haven)
+setwd("C:/Users/JF_Mra/Documents/Unal S6/Modelos_Jerarquicos/Book_Data")
+datos <- read_dta("nes/nes5200_processed_voters_realideo.dta")
+attach(datos)
+
+# Tomar un subconjunto de los datos
+yr <- 1992
+ok <- year == yr & presvote < 3
+vote <- presvote[ok] - 1
+income <- income[ok]
+```
+
+1) 
+El valor de 0 significa que es un nulo, el valor 1 que no voto y el valor 2 que voto
+```{r}
+head(datos$vote)
+```
+
+```{r}
+head(presvote)
+hist((presvote))
+```
+
+
+3) Construya un diagrama de barras con frecuencia relativa para la variable ingreso. ¿Cuál es el nivel de ingresos que menos presencia tiene entre los encuestados?
+
+```{r}
+temp <- data.frame(table(income))
+barplot(temp$Freq, names.arg = temp$income)
+```
+
+4) Ajuste el modelo fit.1 de la sección 5.1 y obtenga el resumen del modelo usando la función display. ¿Por qué no coinciden sus resultados con los del libro?
+
+```{r}
+fit.1 <- glm (vote ~ income, family=binomial(link="logit"))
+display (fit.1)
+
+plot (income, vote)
+curve (invlogit (coef(fit.1)[1] + coef(fit.1)[2]*x), add=TRUE)
+
+sim.1 <- sim (fit.1)
+for (j in 1:10){
+curve (invlogit (sim.1$beta[j,1] + sim.1$beta[j,2]*x),
+col="gray", lwd=.5, add=TRUE)}
+```
+

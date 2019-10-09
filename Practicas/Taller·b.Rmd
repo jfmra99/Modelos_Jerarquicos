@@ -1,0 +1,85 @@
+---
+title: "Taller 3B"
+author: "Juan felipe Múnera Vergara"
+date: "9/25/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Carga de los datos
+
+```{r}
+library(haven)
+setwd("C:/Users/JF_Mra/Documents/Unal S6/Modelos_Jerarquicos/Book_Data")
+kidiq <- read_dta("child.iq/kidiq.dta")
+attach(kidiq)
+library("arm")
+
+```
+
+
+## 1) Haga un diagrama en 3d del score versus la edad de la mamá y el IQ de la mamá. ¿Cuál variable debe quedar en el eje vertical?
+```{r}
+library(rgl)
+library(car)
+model <- lm(kid_score ~ mom_iq + mom_age)
+
+scatter3d(x = mom_age[100:400], y = mom_iq[100:400], z = kid_score[100:400], surface=T)  
+  
+```
+
+## 2) Ajuste el modelo anterior e imprima la tabla de resumen del modelo.
+
+```{r}
+summary(model)
+```
+
+## 5)¿Cuál de las dos frases siguentes es correcta y cual errada: “El error estándar de β1 es …” y “El error estándar de β^1 es …”. 
+
+
+La segunda.
+
+## 6) Construya manualmente un intervalo de confianza aproximado (roughly) para β1, no use R para construirlo.
+(-0.26427, 1.04053)
+
+
+## 7)
+
+```{r}
+fit.3 <- lm (kid_score ~ mom_hs + mom_iq)
+beta.hat <- coef (fit.3)
+beta.sim <- sim (fit.3)@coef
+
+kidscore.jitter <- jitter(kid_score)
+
+jitter.binary <- function(a, jitt=.05){
+   ifelse (a==0, runif (length(a), 0, jitt), runif (length(a), 1-jitt, 1))
+}
+
+jitter.mom_hs <- jitter.binary(mom_hs)
+
+par (mfrow=c(1,2))
+plot (mom_iq, kid_score, xlab="Mother IQ score", ylab="Child test score", 
+  pch=20, xaxt="n", yaxt="n")
+axis (1, c(80,100,120,140))
+axis (2, c(20,60,100,140))
+for (i in 1:10){
+  curve (cbind (1, mean(mom_hs), x) %*% beta.sim[i,], lwd=.5, col="gray",
+    add=TRUE)
+}
+curve (cbind (1, mean(mom_hs), x) %*% beta.hat, col="black", add=TRUE)
+        
+plot (jitter.mom_hs, kidscore.jitter, xlab="Mother completed high school",
+  ylab="Child test score", pch=20, xaxt="n", yaxt="n")
+axis (1, seq(0,1))
+axis (2, c(0,50,100,150))
+for (i in 1:10){
+  curve (cbind (1, x, mean(mom_iq)) %*% beta.sim[i,], lwd=.5, col="gray",
+    add=TRUE)
+}
+curve (cbind (1, x, mean(mom_iq)) %*% beta.hat, col="black", add=TRUE)
+```
+

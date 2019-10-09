@@ -1,0 +1,4 @@
+GLM
+Familia=binomial
+
+Las funciones de enlace más utilizada son link=("logit", "cauchit", "probit")
