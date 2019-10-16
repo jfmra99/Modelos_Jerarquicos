@@ -1,0 +1,79 @@
+---
+title: "Regresón Multinomial"
+author: "J F Mra"
+date: "16 de octubre de 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(titanic)
+d1 <- titanic_train
+d1 <- subset(d1, d1$Embarked != "") # delete rows where Embarked didn't have any value
+```
+```{r}
+library(dplyr)
+df <- d1 %>% 
+  mutate(
+    Pclass =factor(Pclass, levels=c("1", "2", "3")),
+    Sex = factor(Sex, levels = c ("female", "male")),
+    Embarked = factor(Embarked)
+    )
+table(df$Pclass)
+```
+
+```{r}
+formula <- "Pclass ~ Sex + Embarked + SibSp + Parch"
+mod <- nnet::multinom(formula, data=d1)
+```
+
+```{r}
+output <- summary(mod)
+print(output)
+```
+
+#Probabilidades de cada persona para cada grupo
+
+```{r}
+p_hat <- fitted(mod)
+head(round(p_hat, digits=2))
+
+```
+
+```{r}
+confusion <- table(Predicted=predict(object=mod, type="class"),
+                   True=d1$Pclass)
+confusion
+accuracy <- 0
+for(i in 1:3) accuracy<- accuracy+sum(confusion[i,i])
+accuracy <- accuracy/sum(apply(confusion,1, sum))
+
+accuracy
+  
+
+```
+Create a new model with other covariates to obtain a better confusion matrix.
+```{r}
+formula <- "Pclass ~ Sex*Survived + Fare + Parch"
+mod2 <- nnet::multinom(formula, data=d1)
+
+confusion <- table(Predicted=predict(object=mod2, type="class"),
+                   True=d1$Pclass)
+confusion
+accuracy <- 0
+for(i in 1:3) accuracy <- accuracy+sum(confusion[i,i])
+accuracy <- accuracy/sum(apply(confusion,1, sum))
+
+accuracy
+```
+
+```{r}
+library(gamlss)
+
+mod_gam <- gamlss(formula, data = na.omit(d1), family = MN3)
+head(predict(object=mod2, type="class"))
+```
+
