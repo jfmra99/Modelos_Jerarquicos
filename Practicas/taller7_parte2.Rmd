@@ -1,0 +1,132 @@
+---
+title: "Taller7"
+author: '.'
+date: "24 de enero de 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Taller 7 Parte 2
+
+1)
+¿En qué tipo de regresión estaba interesado Michael?
+posisson
+
+¿Cuál de las dos respuestas (la de ocram o la de Mark) usted considera que es más intuitiva para simular datos?
+¿Cuál de las dos respuestas tiene mayor número de votos favorables?
+Ocram
+
+Parametors usados por Ocram: (B0, B1)
+
+
+# Codigo de ocram
+
+```{r}
+
+#sample size
+n <- 5
+#regression coefficients
+beta0 <- 1
+beta1 <- 0.2
+#generate covariate values
+x <- runif(n=n, min=0, max=1.5)
+#compute mu's
+mu <- exp(beta0 + beta1 * x)
+#generate Y-values
+y <- rpois(n=n, lambda=mu)
+#data set
+data <- data.frame(y=y, x=x)
+data
+
+model <- glm(y~x , data = data, family = poisson)
+summary(model)
+
+
+```
+
+B0 = (0.9787)
+B1 = (0.24)
+
+
+Las estimaciones son muy cercanas al vector real.
+
+
+
+## 2) Simule 10 observaciones para el siguiente modelo.
+
+```{r}
+n <- 10
+x <- runif (n)
+landa <- exp(2 + 0.5*x)
+y <- rpois(n, landa)
+
+
+```
+
+
+## 3) En este ejercicio usted va a realizar un estudio de simulación pequeño para estudiar qué tan bien se estiman los parámetros en un modelo de regresión Poisson en función del número de observaciones n disponibles. En particular, considere el modelo del ejercicio anterior para la simulación.
+
+
+Luego de definir el vector n siga los siguientes pasos.
+
+Seleccionar un valor de n.
+Simular n observaciones yi y xi.
+Encontrar β^0 y β^1.
+Almacenar β^0 y β^1.
+Repetir los pasos anteriores nrep=1000 veces.
+Calcular la media de todos los β^0 y todos los β^1 anteriores.
+Repita los pasos anteriores para cada uno de los valores de n que usted eligió.
+
+
+```{r}
+n = c(seq(20, 10000, 30))
+replicas <- 20
+
+generate_B <- function(n){
+  x <- runif(n)
+  landa <-  exp(2 + 0.5*x)
+  y <- rpois(x, landa)
+  params <- glm(y~x , family = poisson)$coefficients
+  return(params)
+}
+
+
+create <- function(n){
+  temp <- replicate(replicas, generate_B(n))
+  res <- apply(temp, 1, mean)
+  res
+  
+}
+
+temp_res <- lapply(n, create)
+
+#temp2 <- do.call(rbind,lapply(temp_res,data.frame))
+resultados <- as.data.frame(do.call(rbind, temp_res))
+colnames(resultados) <- c("B0", "B1")
+resultados$n <- n
+
+
+```
+
+
+
+
+
+```{r}
+library(ggplot2)
+p <- ggplot(resultados, aes(x=n, y=B0)) +
+  geom_line() + 
+  xlab("")
+p + geom_hline(yintercept = 2, colour = "red")+ylim(1.99,2.02)
+```
+
+```{r}
+p <- ggplot(resultados, aes(x=n, y=B1)) +
+  geom_line() + 
+  xlab("")
+p + geom_hline(yintercept = 0.5, colour = "red")
+```
+

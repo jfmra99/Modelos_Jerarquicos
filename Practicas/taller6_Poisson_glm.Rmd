@@ -1,0 +1,35 @@
+---
+title: "Taller glmm - Poisson"
+author: "Juan felipe Múnera Vergara"
+date: "10/9/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Calculo de correlación para los 3 modelos
+```{r}
+url <- 'https://newonlinecourses.science.psu.edu/stat504/sites/onlinecourses.science.psu.edu.stat504/files/lesson07/crab/index.txt'
+crab <- read.table(file=url)
+colnames(crab) <- c("Obs", "C", "S", "W", "Wt", "Sa")
+crab <- crab[, -1] # To eliminate obs
+crab$C <- as.factor(crab$C) # To ensure color as factor
+```
+
+```{r, include=F}
+library(gamlss)
+```
+
+```{r}
+mod.p <- gamlss(Sa ~ 1, data=crab, family=PO)
+mod.nb <- gamlss(Sa ~ 1, data=crab, family=NBI)
+mod.zip <- gamlss(Sa ~ 1, data=crab, family=ZIP)
+```
+
+```{r}
+
+```
+
+

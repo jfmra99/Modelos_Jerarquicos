@@ -1,0 +1,109 @@
+---
+title: "Ejercicios de repaso"
+author: "JFMRA"
+date: "22 de enero de 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Punto 1 pag 152
+
+```{r}
+
+ballthrows <- function(prob){
+  res <- rbinom(1, size = 1, prob = prob)
+  
+  while(TRUE){
+    temp <- rbinom(1, size = 1, prob = prob)
+    res <- c(res, temp)
+    
+    cond <- sum(res[c(length(res)-1, length(res))])
+    if (cond == 0){break}
+  }
+  res
+}
+
+attempt <- ballthrows(0.6)
+
+attempt
+
+
+
+```
+
+```{r}
+simulation <- lapply(rep(0.6, 10000),ballthrows)
+
+points <- lapply(simulation, sum)
+n_attempts <- lapply(simulation, length)
+
+plot(n_attempts, points)
+
+W <- table(unlist(n_attempts))
+
+barplot(W)
+mean(W)
+sd(W)
+
+```
+
+
+## Preguntas adicionales 
+### a. calcule 
+
+```{r}
+simulation <- lapply(rep(0.6, 10000),ballthrows)
+
+W <- unlist(lapply(simulation, length))
+W
+```
+
+```{r}
+ballthrows <- function(prob){
+  res <- rbinom(1, size = 1, prob = prob)
+  
+  while(TRUE){
+    temp <- rbinom(1, size = 1, prob = prob)
+    res <- c(res, temp)
+    
+    cond <- sum(res[c(length(res)-1, length(res))])
+    if (cond == 0){break}
+  }
+  return(length(cond))
+}
+
+W2 <- replicate(n = 10000, ballthrows)
+```
+
+
+
+
+
+2) Continuous probability simulation: the logarithms of weights (in pounds) of men
+in the United States are approximately normally distributed with mean 5.13
+and standard deviation 0.17; women with mean 4.96 and standard deviation
+0.20. Suppose 10 adults selected at random step on an elevator with a capacity
+of 1750 pounds. What is the probability that the elevator cable breaks?
+
+```{r}
+meanhom <- 5.13; meanmuj <- 4.96
+sdhom <- 0.17; sdmuj <- 0.2
+
+select <- function(n = 10){
+  sexos <- sample(0:1, n, replace = T) #Hombres = 1, mujeres = 2
+  pesos <- exp(
+    c(rnorm(sum(sexos), meanhom, sdhom), 
+      rnorm(n-sum(sexos), meanmuj, sdmuj)))
+  return(sum(pesos))
+}
+
+res <- replicate(10000,select())
+
+res_resumen <- table(res > 1750)
+barplot(res_resumen, names.arg(c("No se quiebra", "Se quiebra")))
+```
+
+
