@@ -1,0 +1,68 @@
+---
+title: "Taller 12 parte 1"
+author: "JFMra"
+date: "29 de enero de 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Simular n=5 observaciones del siguiente modelo normal:
+
+```{r}
+n = 5
+sigma_sq = 16
+x <- runif(n, min= -5, max= 6)
+mu <- 4 -  6*x
+y <- rnorm(mu, sqrt(sigma_sq))
+```
+
+## 2 Considere el siguiente modelo normal mixto con intercepto aleatorio  
+
+Complete el siguiente código de R para simular ni=50 observaciones para G=10 grupos, es decir, en total 500 observaciones. Cambie los símbolos &&& por el código correcto para simular los datos solicitados.
+
+```{r}
+ni <- 50
+G <- 10
+nobs <- ni * 10                      # Numero total de observaciones
+grupo <- factor(rep(x=1:G, each=ni)) # Para crear la variable grupal
+obs <- rep(x=1:ni, times=G)           # Para identificar las obs por grupo
+x <- runif(n=nobs, min=-5, max=6)  # La covariable
+b0 <- rnorm(n=G, mean=0, sd=sqrt(625))    # El Intercepto aleatorio
+b0 <- rep(x=b0, each=ni)              # El intercepto aleatorio pero repetido
+media <- 4 - 6 * x + b0            # La media
+y <- rnorm(n=nobs, mean=media, sd=sqrt(sigma_sq)) # La variable respuesta
+datos <- data.frame(grupo, obs, b0, x, y) # Organizando el dataframe
+```
+
+```{r}
+datos
+```
+
+b0 se repite cada 50 observaciones, es decir que hay 50 obs para cada uno de los 10 grupos y b0 representa el intercepto real que poseen.
+
+
+## 3. Use el código de abajo para dibujar los datos simulados, el resultado que usted va a obtener es una figura similar (no igual porque estamos simulando sin fijar la semilla) a la figura que se muestra luego.
+
+```{r}
+library(ggplot2)
+ggplot(datos, aes(x, y, color=grupo) ) + 
+  geom_point() + 
+  labs(colour="Grupo/Cluster")
+```
+
+## Que observa en la figura?
+
+Todos los grupos tienen la misma pendiente.
+
+## ¿Qué efecto tiene la inclusión del intercept b0 en la simulación de los datos?
+
+Los 500 datos son generados de la misma distribución, luego se suman los valores aleatorios b0 provenientes d euna normal para cambiar el nivel de cada uno de los grupos.
+
+## Escriba los 4 elementos del vector de parámetros del modelo con intercepto aleatorio.
+
+b0, b1, sigmay, sigma0
+
+
