@@ -1,0 +1,87 @@
+---
+title: "Taller 12 45"
+author: "JfMra"
+date: "7/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(nlme)
+help("nlme")
+```
+
+Consulte la ayuda de la base de datos Orthodont, escriba en la consola help("Orthodont").
+
+```{r}
+help("Orthodont")
+plot(Orthodont)
+```
+
+```{r}
+help("lme")
+data("Orthodont")
+```
+
+
+Examples
+```{r}
+fm1 <- lme(distance ~ age, data = Orthodont) # random is ~ age
+fm2 <- lme(distance ~ age + Sex, data = Orthodont, random = ~ 1)
+summary(fm1)
+summary(fm2)
+```
+
+
+8)
+
+
+Simular n=5 observaciones del siguiente modelo normal:
+```{r}
+ni <- 50
+G <- 10
+sigma_sq <- sqrt(16)
+nobs <- ni * 10                      # Numero total de observaciones
+grupo <- factor(rep(x=1:G, each=ni)) # Para crear la variable grupal
+obs <- rep(x=1:ni, times=G)           # Para identificar las obs por grupo
+x <- runif(n=nobs, min=-5, max=6)  # La covariable
+b0 <- rnorm(n=G, mean=0, sd=sqrt(625))    # El Intercepto aleatorio
+b0 <- rep(x=b0, each=ni)              # El intercepto aleatorio pero repetido
+media <- 4 - 6 * x + b0            # La media
+y <- rnorm(n=nobs, mean=media, sd=sqrt(sigma_sq)) # La variable respuesta
+datos <- data.frame(grupo, obs, b0, x, y) # Organizando el dataframe
+```
+
+```{r}
+library(ggplot2)
+ggplot(datos, aes(x, y, color=grupo) ) + 
+  geom_point() + 
+  labs(colour="Grupo/Cluster")
+```
+
+```{r}
+library(lme4)
+fit1 <- lmer(y ~ x + (1 | grupo), data=datos)
+fit <- lme(y ~ x , data = datos, random = ~ 1|grupo) # random is ~ age 
+  
+summary(fit)
+summary(fit1)
+```
+
+```{r}
+coef(fit)
+coef(fit1)
+```
+```{r}
+fixef(fit)
+ranef(fit)
+```
+
+```{r}
+class(fit)
+class(fit1)
+```
+
