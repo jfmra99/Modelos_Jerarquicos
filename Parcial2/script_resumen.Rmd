@@ -1,0 +1,150 @@
+---
+title: "Summary Script"
+author: "Juan Felipe Múnera"
+date: "2/16/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Simulación de un modelo mixto
+
+```{r}
+ni <- 50 # Número por grupo
+G <- 10 # número de grupos
+nobs <- ni * 10                      # Numero total de observaciones
+grupo <- factor(rep(x=1:G, each=ni)) # Para crear la variable grupal de 1 a G
+obs <- rep(x=1:ni, times=G)           # Para identificar las obs por grupo
+x <- runif(n=nobs, min=-5, max=6)  # La covariable
+b0 <- rnorm(n=G, mean=0, sd=sqrt(625))    # El Intercepto aleatorio
+b0 <- rep(x=b0, each=ni)              # El intercepto aleatorio pero repetido
+
+b1 <- rnorm(n=G, mean=0, sd=sqrt(200))  #slope aleatoria
+b1 <- rep(x=b1, each=ni)
+#b1 = 0
+
+media <- 4 - 6 * x + b0 + b1*x           # La media
+sigma_sq = 16 #standard deviation
+y <- rnorm(n=nobs, mean=media, sd=sqrt(sigma_sq)) # La variable respuesta
+datos <- data.frame(grupo, obs, b0, x, y) # Organizando el dataframe
+```
+
+```{r}
+library(ggplot2)
+ggplot(datos, aes(x, y, color=grupo) ) + 
+  geom_point() + 
+  labs(colour="Grupo/Cluster")
+```
+
+
+## Ajuste de modelos mixtos
+
+Los parámetros del modelo Jerarquico son: $\beta$ (osea $\beta_0,...,\beta_p$), ($\sigma = \sigma_y$), ($\sigma_0$) varianza relativa a los interceptos aleatorios, $\sigma_!$ varianza relativa a las pendientes aleatorias. 
+
+```{r}
+library(lme4)
+fit <- lmer(y ~ x + (1 + x | grupo), data=datos)
+summary(fit)
+```
+
+
+```{r}
+## Efectos fijos
+fixef(fit)
+
+## Obtención de varianzas
+VarCorr(fit)
+
+## Obtención de random-effects
+ranef(fit)
+
+##Obtención de la expresión del modelo
+coef(fit)
+
+## Intervalos de confianza
+confint(fit)
+
+## predicciones
+#predict(fit, newdata= data.frame(grupo=c(1,2), x = c(3,5)))
+```
+
+
+### Ajuste con nlme
+```{r}
+library(nlme)
+
+
+fit2 <- lme(y ~ x + 1, data = datos, random = ~ 1 + x | grupo)
+summary(fit2)
+
+```
+
+
+## Pruebas de hipotesis
+
+
+### Prueba de Wald para efectos fijos
+H0: B1 = -0.5
+
+```{r}
+se <- temp$coefficients[2,2]
+B_Est <- temp$coefficients[2,1]
+B_test <- -0.5
+
+t <- (B_Est - B_test)/se
+
+pt(t, lower.tail = F, df = dim(datos)[1] - 2 - 3)
+
+```
+
+
+## Prueba de razón de verosimilitud 
+
+H0: No mejora el modelo
+
+$$H_0: \beta_2 = 0 \;\; v.s \;\; H_1: B_2 \not=0 $$
+Sinedo $B_2$ el termino que acompaña al termino cuadratico
+```{r}
+mod1 <- lmer(Reaction~Days + (1+Days|Subject) , data = sleepstudy, REML =F)
+
+mod2 <- lmer(Reaction~Days+I(Days^2) + (1 + Days |Subject), data = sleepstudy, REML =F)
+
+anova(mod1, mod2)
+```
+
+## Prueba de razón de verosimilitud simulada para lme
+```{r}
+mod1_alt <- lme(Reaction~Days , data = sleepstudy, random =~1+Days|Subject , method="ML") 
+
+mod2_alt <- lme(Reaction~Days+I(Days^2), data = sleepstudy, random =~1+Days|Subject , method= "ML") 
+
+simul <- simulate.lme(object=mod1_alt, m2=mod2_alt, method="ML", nsim=1000)
+lrts_nlme <- -2 * (simul$null$ML[, 2] - simul$alt$ML[, 2])
+acumulada1 <- ecdf(x=lrts_nlme) # F(x) para los valores LRT
+
+anova(mod1, mod2)$L.Ratio; anova(mod1_alt, mod2_alt)$`p-value`
+1 - acumulada1(1.65775)
+```
+
+## Prueba de razón de verosimilitud simulada para lmer
+
+valor 
+
+```{r}
+
+data(sleepstudy)
+nrep <- 5000
+lrts_lme4 <- numeric(nrep)
+for (i in 1:nrep) {
+  new_y_h0 <- simulate(mod1) # Asumiendo H0 verdadera
+  sleepstudy$new_y_h0 <- new_y_h0$sim_1
+  aux0 <- lmer(new_y_h0 ~ Days + (1+Days|Subject), data=sleepstudy, REML=FALSE)
+  aux1 <- lmer(new_y_h0 ~ Days+I(Days^2) + (1 + Days |Subject), data=sleepstudy, REML=FALSE)
+  lrts_lme4[i] <- -2 * (logLik(aux0) - logLik(aux1))
+}
+acumulada2 <- ecdf(x=lrts_lme4) # F(x) para los valores LRT
+1 - acumulada2(1.6577)
+```
+
