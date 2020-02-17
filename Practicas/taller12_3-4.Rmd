@@ -1,0 +1,111 @@
+---
+title: "Taller cap 12 p3,4"
+author: "JfMra"
+date: "5/2/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+1) los parametros del modelo son
+
+
+2) los datos se generan como
+```{r}
+ni <- 50
+G <- 10
+nobs <- ni * G                          # Numero total de observaciones
+grupo <- factor(rep(x=1:G, each=ni))        # Para crear la variable grupal
+obs <- rep(x=1:ni, times=G)                # Para identificar las obs por grupo
+x <- rbeta(n=nobs, shape1=2, shape2=4)       # La covariable x
+b1 <- rnorm(n=G, mean=0, sd=sqrt(1000)) # La pendiente aleatoria
+b1 <- rep(x=b1, each=ni)                  # La pendiente repetida
+media <-  4 - 5 * x + b1 * x            # La media
+y <- rnorm(n=nobs, mean=media, sd=sqrt(4))   # La variable respuesta
+datos <- data.frame(grupo, obs, b1, x, y)       # Organizando el dataframe
+```
+
+
+```{r}
+datos
+```
+
+3) Grafico
+
+```{r}
+library(ggplot2)
+ggplot(datos, aes(x=x, y=y, color=grupo)) +
+  geom_point()
+```
+
+
+4)
+
+```{r}
+library(lme4)
+model <- lmer (y ~ x + (x - 1| grupo), data= datos)
+summary(model)
+```
+```{r}
+coef(model)
+```
+
+```{r}
+realb1 <- unique(b1)
+realb1
+## Intercepto real = 4
+```
+
+plot
+
+```{r}
+
+```
+
+
+## Parte 4
+Considere el siguiente modelo normal mixto con intercepto aleatoria y pendiente aleatoria b1i.
+
+2)
+```{r}
+ni <- 50
+G <- 10
+nobs <- G * ni # Numero total de observaciones
+grupo <- factor(rep(x=1:G, each=ni)) # Para crear la variable grupal
+obs <- rep(x=1:ni, times=G) # Para identificar las obs por grupo
+x <- runif(nobs, 0,5) # La covariable
+library(MASS) # Libreria para simular obs de Normal bivariada
+Sigma <- matrix(c(40, 3, # Matriz de var-cov
+                  3, 50), ncol=2, nrow=2)
+b <- mvrnorm(n=G, mu=rep(0, 2), Sigma=Sigma) # Simulando b0 y b1
+b <- apply(b, MARGIN=2, function(c) rep(c, each=ni)) # Replicando
+b0 <- as.vector(b[, 1]) # Separando los b0
+b1 <- as.vector(b[, 2]) # Separando los b1
+media <- 4 - 5 * x + b0 + b1 * x # La media
+y <- rnorm(n=nobs, mean=media, sd=sqrt(4)) # La variable respuesta
+datos <- data.frame(grupo, obs, b0, b1, x, y) # El dataframe
+
+```
+
+
+```{r}
+library(ggplot2)
+ggplot(datos, aes(x=x, y=y, color=grupo)) +
+  geom_point()
+```
+
+
+```{r}
+model2 <- lmer(y~1+x + (1+x|grupo), data=datos)
+ranef(model2)
+data.frame(Intercepto = unique(b0), x = unique(b1) )
+```
+
+```{r}
+
+```
+
