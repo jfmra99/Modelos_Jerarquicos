@@ -42,3 +42,15 @@ for (i in 1:nrep) {
 ```
 
 
+## Grafico de muchos niveles
+
+```{r}
+library(ggplot2)
+ggplot(data = ChickWeight, aes(x = Time, y = weight, color = Diet)) +
+  geom_point() +
+  theme_bw() +
+  facet_wrap(~ Chick)
+```
+
+
+
