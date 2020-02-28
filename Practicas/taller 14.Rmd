@@ -1,0 +1,63 @@
+---
+title: "Taller 14"
+author: "JfMra"
+date: "28/2/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+La base de datos toenail del paquete HSAUR2 contiene los resultados de un ensayo clínico para comparar dos tratamientos para combatir una infección en los dedos de los pies (dermatophyte onychomycosis).
+
+## 1) Consulte la ayuda de la base de datos para conocer los detalles de las variables recolectadas.
+```{r}
+library(HSAUR2)
+data("toenail")
+```
+- patientID: a unique identifier for each patient in the trial
+- outcome: degree of separation of the nail plate from the nail bed (onycholysis).
+- treatment: a factor with levels itraconazole and terbinafine.
+- time: the time in month when the visit actually took place.
+- visit: number of visit attended.
+
+## 2) ¿Cuáles pacientes solo asistieron UNA vez al control?
+```{r}
+ids <- unique(toenail[toenail$visit>=2,"patientID"])
+filter <- toenail$patientID %in%ids
+temp <- unique(toenail[!filter,]$patientID)
+temp
+```
+
+
+
+## 3) ¿Cuál fue el mayor número de visitas de un paciente?
+
+```{r}
+max(toenail$visit)
+```
+
+
+## 4) ¿Cuántos pacientes recibieron terbinafine? ¿Cuántos pacientes recibieron itraconazole?
+```{r}
+library(dplyr)
+datemp <- toenail[toenail$visit==1,]
+datemp %>% group_by(treatment)%>% summarise(n = n())
+```
+
+
+## 5) Haga un dibujo igual al mostrado abajo para monitorear la evolución del estado de la enfermedad Y en función del tiempo.
+
+```{r}
+library(ggplot2)
+toenail$y <- ifelse(toenail$outcome=="none or mild", 1, 0) 
+datemp <- toenail[toenail$patientID %in% c(1, 3, 21, 383),]
+ggplot(data = datemp, aes(x = time, y = y)) +
+   scale_y_continuous(breaks=c(0,1))+
+  geom_point() +
+  theme_bw() +
+  facet_wrap(~ patientID)
+
+```
+
