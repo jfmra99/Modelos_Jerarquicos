@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Simulación de un modelo mixto
 
 ```{r}
-ni <- 50 # Número por grupo
+ni <- 5000 # Número por grupo
 G <- 10 # número de grupos
 nobs <- ni * 10                      # Numero total de observaciones
 grupo <- factor(rep(x=1:G, each=ni)) # Para crear la variable grupal de 1 a G
@@ -107,12 +107,18 @@ H0: No mejora el modelo
 $$H_0: \beta_2 = 0 \;\; v.s \;\; H_1: B_2 \not=0 $$
 Sinedo $B_2$ el termino que acompaña al termino cuadratico
 ```{r}
+library(lme4)
 mod1 <- lmer(Reaction~Days + (1+Days|Subject) , data = sleepstudy, REML =F)
 
-mod2 <- lmer(Reaction~Days+I(Days^2) + (1 + Days |Subject), data = sleepstudy, REML =F)
+mod2 <- lmer(Reaction~Days + (-1 + Days |Subject), data = sleepstudy, REML =F)
 
 anova(mod1, mod2)
+
+-2*(logLik(mod2) - logLik(mod1))
+logLik(mod2)
+logLik(mod1)
 ```
+
 
 ## Prueba de razón de verosimilitud simulada para lme
 ```{r}
@@ -146,5 +152,45 @@ for (i in 1:nrep) {
 }
 acumulada2 <- ecdf(x=lrts_lme4) # F(x) para los valores LRT
 1 - acumulada2(1.6577)
+```
+
+## Ultimo punto del parcial
+```{r}
+
+ni <- 10 # Número por grupo
+G <- 10 # número de grupos
+nobs <- ni * G                      # Numero total de observaciones
+grupo <- factor(rep(x=1:G, each=ni)) # Para crear la variable grupal de 1 a G
+obs <- rep(x=1:ni, times=G)           # Para identificar las obs por grupo
+set.seed(770444)
+x1 <- rbinom(n=nobs, prob=0.3, size=10)  # La covariable
+set.seed(770444)
+x2 <- rbeta(nobs, shape1=0.7, shape2=0.5)  # La covariable
+
+set.seed(770444)
+b0 <- rnorm(n=G, mean=0, sd=sqrt(4))    # El Intercepto aleatorio
+b0 <- rep(x=b0, each=ni)              # El intercepto aleatorio pero repetido
+
+
+media <- -3+ 2*x1 -4*x2+ b0      # La media
+sigma_sq = 16 #standard deviation
+set.seed(770444)
+y <- rnorm(n=nobs, mean=media, sd=sqrt(sigma_sq)) # La variable respuesta
+datos <- data.frame(grupo, obs, b0, x1, x2, y) # Organizando el dataframe
+
+
+### SIMULACON
+
+mod1_alt <- lme(y~x1 , data = datos, random =~1|grupo , method="ML") 
+
+mod2_alt <- lme(y~x1+x2, data = datos, random =~1|grupo , method= "ML") 
+
+simul <- simulate.lme(object=mod1_alt, m2=mod2_alt, method="ML", nsim=10000)
+lrts_nlme <- -2 * (simul$null$ML[, 2] - simul$alt$ML[, 2])
+acumulada1 <- ecdf(x=lrts_nlme) # F(x) para los valores LRT
+
+anova(mod1_alt, mod2_alt)$L.Ratio; anova(mod1_alt, mod2_alt)$`p-value`
+1 - acumulada1(8.297255)
+
 ```
 
