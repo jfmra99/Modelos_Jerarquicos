@@ -117,3 +117,25 @@ ggplot(data = epilepsy[epilepsy$subject %in%  c(8, 14, 35, 49),], aes(x = x, y =
 https://stats.stackexchange.com/questions/204426/multinomial-mixed-models-with-glmmadmb
 
 ?brms::brm
+
+
+```{r}
+library(plyr)
+dd <- data.frame(
+  predicted = rnorm(72, mean = 2, sd = 2),
+  state = rep(c("A", "B", "C"), each = 24)
+) 
+
+grid <- with(dd, seq(min(predicted), max(predicted), length = 100))
+normaldens <- ddply(dd, "state", function(df) {
+  data.frame( 
+    predicted = grid,
+    density = dnorm(grid, mean(df$predicted), sd(df$predicted))
+  )
+})
+
+ggplot(dd, aes(predicted))  + 
+  geom_density() + 
+  geom_line(aes(y = density), data = normaldens, colour = "red") +
+  facet_wrap(~ state) 
+```
