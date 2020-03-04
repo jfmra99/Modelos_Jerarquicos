@@ -1,0 +1,119 @@
+---
+title: "Taller15"
+author: "JfMra"
+date: "4/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. onsulte la ayuda de la base de datos para conocer los detalles de las variables recolectadas.
+
+```{r}
+data("epilepsy", package = "HSAUR2")
+epilepsy$x <- as.numeric(epilepsy$period)
+epilepsy$y <- epilepsy$seizure.rate
+```
+
+## 2. ¿Cuántos pacientes tiene la base de datos?
+```{r}
+length(unique(epilepsy$subject))
+```
+
+## 3. ¿Cuál fue el mayor número de seguimientos a un paciente?
+```{r}
+4
+
+max(epilepsy$period)
+```
+
+## 5. ¿Cuántos pacientes recibieron Progabide? ¿Cuántos pacientes recibieron el placebo?
+
+```{r}
+library(tidyverse)
+epilepsy%>% group_by(treatment) %>% summarise(count = n())
+```
+
+## 6. Haga un dibujo igualito al mostrado abajo para monitorear la evolución de la variable Y en función del periodo X para los pacientes 8, 14, 35, 49. Use colores para diferenciar los pacientes que recibieron Progabide y el placebo.
+
+```{r}
+library(ggplot2)
+
+ggplot(data = epilepsy[epilepsy$subject %in%  c(8, 14, 35, 49),], aes(x = x, y = y, color = treatment)) +
+  geom_point() +
+  theme_bw() +
+  facet_wrap(~ subject)
+```
+
+## 7. Ajuste el siguiente modelo en el objeto mod1.
+
+```{r}
+library(lme4)
+mod7 <- glmer(y~x+treatment + (1 | subject), data=epilepsy,nAGQ=1, family = poisson)
+#summary(mod7)
+```
+
+## 8.1
+
+```{r}
+mod8 <- glmer(y~x*treatment + (1 | subject), data=epilepsy,nAGQ=1, family = poisson)
+```
+
+## 8.2
+
+```{r}
+mod8.2 <- glmer(y~x*treatment + (1+x | subject), data=epilepsy,nAGQ=1, family = poisson)
+```
+
+
+## 8.3
+```{r}
+anova(mod7, mod8, mod8.2)
+```
+El mejor es el modelo 3 u 8.2
+
+## 9.
+el enlace o respuesta, de manera que devuelva el valor predicho por defecto
+```{r}
+pred.mod7 <- predict(mod7, type = "response")
+pred.mod8 <- predict(mod8, type = "response")
+pred.mod8.2 <- predict(mod8.2, type = "response")
+```
+
+## 10.
+
+```{r}
+## Correlacion modelo 1 o mod7
+cor(epilepsy$y, pred.mod7)
+## Correlacion modelo 2 o mod8
+cor(epilepsy$y, pred.mod8)
+## Correlacion modelo 3 o mod8.2
+cor(epilepsy$y, pred.mod8.2)
+```
+EL mejor es el modelo 3
+
+## 11. Escriba el modelo ajustado que resultó ser el mejor modelo.
+```{r}
+summary(mod8.2)
+```
+
+$$\log(\widehat{y}) = 1.86491 -0.04349\times x -0.25098\times treatmentProgabide-0.01383 \times treatmentProgabide + $$
+
+
+```{r}
+epilepsy$predicted <- pred.mod8.2
+
+ggplot(data = epilepsy[epilepsy$subject %in%  c(8, 14, 35, 49),], aes(x = x, y = y, color = treatment)) +
+  geom_point() +
+  theme_bw() +
+  facet_wrap(~ subject)+
+  geom_line(aes(y =predicted, x = x))
+```
+
+## USAR PARA MULTINOMIAL
+
+https://stats.stackexchange.com/questions/204426/multinomial-mixed-models-with-glmmadmb
+
+?brms::brm
