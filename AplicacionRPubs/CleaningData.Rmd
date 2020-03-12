@@ -1,0 +1,162 @@
+---
+title: "CleaningTheData"
+author: "Juan Felipe Múnera"
+date: "3/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+```
+
+
+## Carga bases
+
+```{r}
+##Lectura de las 6 bases de datos desde el drectorio
+
+getwd() #CHECKEAR QUE EL DIRECTORIO SEA EL DONDE ESTA EL ARCHIVO
+
+files_names= list.files(pattern="*.csv", path =  paste(getwd(),"/datasets/Original",sep=""))
+path <- paste(getwd(),"/datasets/Original/",files_names[-6],sep="")
+##Lectura de los datos 2014-2018.
+df <- do.call(rbind, lapply(path, function(x) read.csv(x, stringsAsFactors = FALSE,encoding = "UTF-8", ) ))
+
+
+#La estructura de los datos del 2019 es diferente
+df_2019 <- read.csv(paste(getwd(),"/datasets/Original/",files_names[6],sep=""), header=T,
+                 encoding="UTF-8")
+
+colnames(df)[1] <- gsub('X.U.FEFF.','',colnames(df)[1])
+colnames(df_2019)[1] <- gsub('X.U.FEFF.','',colnames(df_2019)[1])
+```
+
+
+```{r}
+#Seleccionamos las columnas relevantes
+cols <- c("OBJECTID", "RADICADO", "CLASE", "GRAVEDAD", "BARRIO", "COMUNA", "TIPO_GEOCOD",
+          "FECHA", "HORA", "DIA", "MES", "PERIODO", "DIA_NOMBRE", "COMUNA")
+
+## Creando base completa
+df_accidentes <- rbind(df[,cols], df_2019[,cols])
+
+```
+
+
+## Depuración de datos
+
+Solo son relevantes los accidentes en el área metropolitana.
+```{r}
+## Se eliminan accidentes de la zona rural (284 observaciones)
+temp <- df_accidentes[df_accidentes$TIPO_GEOCOD!="ZONA RURAL",]
+
+df_accidentes[df_accidentes$GRAVEDAD == "CON MUERTO",]$GRAVEDAD <- "MUERTO"
+
+df_accidentes[df_accidentes$CLASE == "Caida Ocupante" | df_accidentes$CLASE == "Caída de Ocupante",]$CLASE <- "Caída Ocupante"
+df_accidentes[df_accidentes$CLASE == "",]$CLASE <- "Otro" 
+
+df_accidentes[df_accidentes$CLASE == "Choque ",]$CLASE <- "Choque"
+
+temp <- df_accidentes
+df_accidentes <- temp %>% 
+   mutate_at(c("CLASE", "GRAVEDAD"), as.factor)
+
+remove(temp)
+
+```
+
+
+```{r}
+dups <- df_accidentes[duplicated(df_accidentes[,"RADICADO"]),]
+dups2 <- df_accidentes[duplicated(df_accidentes[,"OBJECTID"]),]
+```
+
+
+
+## Selección de accidentes de las 16 comunas:
+
+```{r}
+comunas <- count(df_accidentes, COMUNA) #EN su mayoria las comunas con menos de 4 accidentes son tabulaciones erroneas d eun barreo o hacen referencia a zonas que no pertenecen a las 16 comunas principales de medellín
+comunas_relevantes <- head(comunas[order(-comunas$n),][1], 16) ## Las 16 más accidentadas corresponden al área metropolitana
+
+df_accidentes <- filter(df_accidentes, COMUNA %in% unlist(comunas_relevantes))
+
+```
+
+
+
+## Corrección de barrios 
+```{r}
+
+barrios <-c("Aures No. 2", "Asomadera No. 1" ,"Barrio de Jesús","B. Cerro  El Volador" ,"Berlin","Bomboná No. 1","Campo Valdés No.2","Manrique Central No.1","Manrique Central No.2","Moscú No.1","Moscú No.2",
+"Nueva Villa de La Iguaná","Santa María de Los Ángeles","Santo Domingo Savio No.1","Versalles No.1","Versalles No.2","Villa Liliam")
+
+reemplazo <- c("Aures No.2", "Asomadera No.1", "Barrios de Jesús","B. Cerro El Volador" ,"Berlín","Bomboná No.1","Campo Valdés No. 2","Manrique Central No. 1","Manrique Central No. 2","Moscú No. 1","Moscú No. 2",
+"Nueva Villa de la Iguaná","Santa María de los Ángeles","Santo Domingo Savio No. 1","Versalles No. 1","Versalles No. 2","Villa Lilliam")
+
+for(i in (1:length(barrios))){
+  df_accidentes[!is.na(df_accidentes$BARRIO) & df_accidentes$BARRIO == barrios[i],]$BARRIO = reemplazo[i]
+}
+```
+
+
+##NA inspection
+
+De momento opto por remover los NA, luego podemos ver si es preferible realiza imputaciones.
+```{r}
+
+df_accidentes[df_accidentes == ""] <- NA
+na_DF <- df_accidentes[rowSums(is.na(df_accidentes)) > 0,]# Las columnas con NA son diseño (gran mayoria) y clase
+final.df<- na.omit(df_accidentes[,-2]) #DF sin NAs
+temp <- filter(final.df, BARRIO=="0" | BARRIO=="Sin Nombre") 
+final.df <- filter(final.df, BARRIO!="0" & BARRIO!="Sin Nombre") 
+```
+
+```{r}
+write.csv(final.df, "Datasets/base_Depurada.csv", row.names=F)
+```
+
+
+## Creación de conjunto de datos
+
+```{r}
+df_mens <- final.df %>% group_by(COMUNA, BARRIO, PERIODO, MES)%>%
+  summarise(nro.accidentes = n())
+
+# Añadiendo identificador
+df_mens  <- df_mens %>% mutate(
+  cod = paste(COMUNA, BARRIO, PERIODO, MES, sep="")
+)
+
+
+temp <- unique(df_mens[, 1:2])
+temp <- tidyr::crossing(temp, data.frame(PERIODO= rep(c(2014:2019), each=12),MES = rep(1:12, 6))) 
+temp  <- temp %>% mutate(
+  nro.accidentes = 0,
+  cod = paste(COMUNA, BARRIO, PERIODO, MES, sep="")
+)
+
+temp <- temp[!(temp$cod %in%df_mens$cod),]
+## corrigiendo error random?
+temp$PERIODO2 <- temp$PERIODO; df_mens$PERIODO2  <- df_mens$PERIODO
+
+
+
+df_mens_complete <- rbind(df_mens[-c(3,6)], temp[-c(3,6)])
+```
+
+
+```{r}
+temP3 <- df_mens_complete %>% group_by(COMUNA, BARRIO) %>% summarise(n= n())
+```
+
+
+```{r}
+write.csv(df_mens_complete, "Datasets/base_mensual_barrios_y_comunas.csv", row.names = F)
+```
+
+
