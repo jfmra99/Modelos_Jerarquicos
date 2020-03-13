@@ -58,7 +58,7 @@ library(ggplot2)
 toenail$y <- ifelse(toenail$outcome=="none or mild", 1, 0) 
 
 p5 <- (toenail[toenail$patientID %in% c(1, 3, 21, 383),]) %>% 
-  ggplot(aes(x = time, y = y)) +
+  ggplot(aes(x = time, y = y, col = treatment)) +
    scale_y_continuous(breaks=c(0,1))+
   geom_point() +
   theme_bw() +
@@ -71,6 +71,7 @@ p5
 ## 6) 
 
 ```{r}
+## reajuste de nveles
 toenail$treatment <- factor(toenail$treatment , levels =levels(toenail$treatment)[c(2,1)])
 ```
 
@@ -147,4 +148,22 @@ p10+
   geom_line(size = 1, aes(y = fitted8), colour="magenta")+
   geom_line(size = 1, aes(y = fitted8_c), colour="red")
 ```
+
+## GRAFICO 8 SEXY
+
+```{r}
+## creamos un grid de prediccion
+df_pred <- data.frame(time = seq(0,18, length.out=500),
+               treatment = rep(c("terbinafine", "itraconazole", "terbinafine", "terbinafine"), each=500),
+               patientID = factor(as.character(rep(c(1, 3, 21, 383), each=500)))
+                               )
+## estimamos la predicción del modelo
+df_pred$estimate <- predict(mod8, newdata = df_pred, type = "response")
+## graficamos clarificando que los datos son los de la predicción, importante tener los mismos nombres en las variables, pero esto debería estar garantizado si te corrio la prediccion
+p5 + geom_line(data=df_pred, aes(x = time, y = estimate))
+
+```
+
+
+
 

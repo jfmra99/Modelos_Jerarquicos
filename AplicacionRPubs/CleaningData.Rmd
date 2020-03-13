@@ -59,7 +59,8 @@ df_accidentes[df_accidentes$GRAVEDAD == "CON MUERTO",]$GRAVEDAD <- "MUERTO"
 df_accidentes[df_accidentes$CLASE == "Caida Ocupante" | df_accidentes$CLASE == "Caída de Ocupante",]$CLASE <- "Caída Ocupante"
 df_accidentes[df_accidentes$CLASE == "",]$CLASE <- "Otro" 
 
-df_accidentes[df_accidentes$CLASE == "Choque ",]$CLASE <- "Choque"
+df_accidentes[df_accidentes$CLASE == "Choque " | df_accidentes$CLASE ==
+  'Choque y Atropello',]$CLASE <- "Choque"
 
 temp <- df_accidentes
 df_accidentes <- temp %>% 
@@ -124,8 +125,13 @@ write.csv(final.df, "Datasets/base_Depurada.csv", row.names=F)
 ## Creación de conjunto de datos
 
 ```{r}
-df_mens <- final.df %>% group_by(COMUNA, BARRIO, PERIODO, MES)%>%
-  summarise(nro.accidentes = n())
+df_mens <- final.df %>% group_by(COMUNA, BARRIO, PERIODO, MES, CLASE)%>%
+  summarise(N.accidentes = n())
+
+df_mens <- tidyr::spread(df_mens, 5, 6)
+
+df_mens[is.na(df_mens)] <- 0
+df_mens$nro.accidentes <- apply(df_mens[,5:10], 1, sum)
 
 # Añadiendo identificador
 df_mens  <- df_mens %>% mutate(
@@ -133,9 +139,18 @@ df_mens  <- df_mens %>% mutate(
 )
 
 
+
+
 temp <- unique(df_mens[, 1:2])
 temp <- tidyr::crossing(temp, data.frame(PERIODO= rep(c(2014:2019), each=12),MES = rep(1:12, 6))) 
+
 temp  <- temp %>% mutate(
+  Atropello=0,
+  'Caída Ocupante'=0,
+  Choque=0,
+  Incendio = 0,
+  Otro=0,
+  Volcamiento=0,
   nro.accidentes = 0,
   cod = paste(COMUNA, BARRIO, PERIODO, MES, sep="")
 )
@@ -146,17 +161,19 @@ temp$PERIODO2 <- temp$PERIODO; df_mens$PERIODO2  <- df_mens$PERIODO
 
 
 
-df_mens_complete <- rbind(df_mens[-c(3,6)], temp[-c(3,6)])
+df_mens_complete <- rbind(df_mens[-c(3,12)], temp[-c(3,12)])
 ```
 
 
 ```{r}
-temP3 <- df_mens_complete %>% group_by(COMUNA, BARRIO) %>% summarise(n= n())
+#cHEQUEO
+##temP3 <- df_mens_complete %>% group_by(COMUNA, BARRIO) %>% summarise(n= n())
 ```
 
 
 ```{r}
-write.csv(df_mens_complete, "Datasets/base_mensual_barrios_y_comunas.csv", row.names = F)
+colnames(df_mens_complete) <- c(colnames(df_mens_complete)[1:10],"PERIODO")
+write.csv(df_mens_complete[c(1:2, 11, 3:10)], file("Datasets/base_mensual_barrios_y_comunas.csv", encoding="UTF-8"),row.names = F)
 ```
 
 

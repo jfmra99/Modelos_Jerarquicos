@@ -1,0 +1,121 @@
+---
+title: "Accidentalidad de Medellín por comunas con  Modelos Mixtos"
+author: "Juan Felipe Múnera"
+date: "3/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(magrittr)
+
+library(lme4)
+library(brms)
+```
+
+
+## Datos 
+```{r}
+data_men_all <- read.csv("Datasets/base_mensual_barrios_y_comunas.csv", encoding='UTF-8')
+
+data_men_all[,c(2,3,4)] %<>% lapply(function(x) factor(as.character(x)))
+
+data_men_all$FECHA <- paste(data_men_all$PERIODO, data_men_all$MES, 1, sep="-") %>% ymd() %>% as.Date()
+data_men_all$FECHA_n <- as.numeric(data_men_all$FECHA)
+
+tidy_data_men_all <- tidyr::gather(data_men_all[-11], "CLASE", "nro.accidentes", 5:10)
+```
+
+```{r}
+
+data_men_comunas <- data_men_all %>% group_by(COMUNA, PERIODO, MES, FECHA_n) %>%
+  summarise(nro.accidentes = sum(nro.accidentes))
+
+tidy_data_men_all_comunas <- tidy_data_men_all%>% group_by(COMUNA, FECHA_n, CLASE) %>%
+  summarise(nro.accidentes = sum(nro.accidentes))
+```
+
+
+```{r}
+ggplot(aes(x = (FECHA_n), y = log(nro.accidentes)), data = data_men_comunas) +
+  geom_point() +
+  theme_bw() +
+ # scale_x_date(date_labels = "%m-%Y")+
+  geom_line()+
+  facet_wrap(~ COMUNA)
+```
+
+```{r}
+ggplot(aes(x = (FECHA_n), y = log(nro.accidentes), col = CLASE), data = tidy_data_men_all_comunas) +
+  geom_point(fill=NA) +
+  theme_bw() +
+ # scale_x_date(date_labels = "%m-%Y")+
+  geom_line()+
+  facet_wrap(~ COMUNA)
+```
+
+
+
+## Ajuste
+
+```{r}
+model <- brm(nro.accidentes ~ poly(FECHA_n, 3) + (1|COMUNA+BARRIO),
+            data = data_men_all, family = poisson())
+
+mod2 <- lmer(nro.accidentes ~ poly(FECHA_n, 3) + (1|COMUNA)+ (1|BARRIO),
+            data = data_men_all)
+```
+
+```{r}
+
+library(gamlss)
+fit2 <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 3) + re(random= ~1|COMUNA),
+                    family = ZIP2(),
+                    data = data_men_all)
+
+fit2$mu.coefSmo[[1]]$coefficients$random
+```
+
+```{r}
+fit3 <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 3) + re(random= ~1|COMUNA/BARRIO),
+                    family = ZIP2(),
+                    data = data_men_all)
+
+fit3$mu.coefSmo[[1]]$coefficients$random
+```
+
+
+```{r}
+fit1 <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 3) + re(random= ~1|BARRIO),
+                    family = ZIP2(),
+                    data = data_men_all)
+
+fit1$mu.coefSmo[[1]]$coefficients$random
+```
+
+
+```{r}
+N <- 15
+dat <- data.frame(
+    y1 = rbinom(N, 10, 0.3), y2 = rbinom(N, 10, 0.5), 
+    y3 = rbinom(N, 10, 0.7), x = rnorm(N)
+)
+dat$size <- with(dat, y1 + y2 + y3)
+dat$y <- with(dat, cbind(y1, y2, y3))
+
+#prior <- prior(normal(0, 10), "b", dpar = muy2) +
+#    prior(cauchy(0, 1), "Intercept") +
+#    prior(normal(0, 2), "Intercept", dpar = muy3)
+
+fit <- brm(bf(y | trials(size)  ~ 1, muy2 ~ x), data = dat, 
+                family = multinomial())
+```
+
+
