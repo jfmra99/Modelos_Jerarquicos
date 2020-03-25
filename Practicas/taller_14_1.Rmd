@@ -1,0 +1,35 @@
+---
+title: "Taller 14_1"
+author: "Juan Felipe Múnera"
+date: "3/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Taller 14_1
+
+```{r}
+g = 200
+n = 100
+N = g*n
+grupo <- rep(factor(1:g), each=n)
+b0 <- rep(rnorm(g, mean = 0, 4), each = n)
+x <- runif(N)
+logitp <- -1.4 + b0 + 0.33*x
+p <- exp(-1.4 + b0 + 0.33*x)/(1+ exp(-1.4 + b0 + 0.33*x))
+y <- rbinom(N, 1, p)
+
+datos <- data.frame(grupo, logitp, b0, x, y) # Organizando el dataframe
+```
+
+```{r}
+library(lme4)
+
+mod <- glmer(y ~ x + (1|grupo), data=datos, family = binomial)
+
+summary(mod)
+```
+

@@ -1,0 +1,610 @@
+---
+title: "Modelación de la Accidentalidad vehicular del área metropolitana de Medellín por comunas entre los años 2014-2019 a través de regresión multinivel"
+author: "Juan Felipe Múnera Vergara"
+date: "3/21/2020"
+output: 
+  html_document:
+    css: Format.css
+    theme: lumen
+    toc: true
+    toc_float:
+      collapsed: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+
+```{r message=FALSE, warning=FALSE, results = 'hide', include=F}
+#CAGRA DE LIBRERIAS
+## Manejo de bases de datos
+library(dplyr)
+library(magrittr)
+## Gráficos
+library(ggplot2)
+library(lubridate)
+## Ajuste de modelos mixtos
+library(lme4)
+library(brms)
+## Manejo de fechas
+library("zoo") 
+## Tablas latex
+library(kableExtra)
+```
+
+
+
+# Objetivos
+
+- Construir un modelo predictivo para el numero de accidentes del área Metropolitana de la ciudad de Medellín a nivel comunal en intervalos mensuales, entre los años del 2014-2019 utilizando la reegresión multinivel (conocida también como mode los jerárquicos o mixtos), utilizando los paquetes `lmea4`y `brms` de R.
+- Comprender la forma en que se la accidentalidad se relaciona con el tiempo para las comunas de Medellín.
+
+
+# Conjunto de datos:
+
+Los datos análizados en el presente documento se obtienen de la [página](https://geomedellin-m-medellin.opendata.arcgis.com/search?tags=movilidad) del portal [GeoMedellín](https://www.medellin.gov.co/geomedellin/) de la alcaldía de Medellín en su sección de datos abiertos. Corresponden a las bases de "Accidentalidad georreferenciada" entre los años 2014 y 2019, los elemento de dichas bases representa un accidente registrado por la Secretaria de Movilidad de la Alcaldia de Medellín y presentaban una serie de covariables que servian para categorizar el tipo de accidente, el momento de su incidencia y su ubicación georreferenciada.
+
+Para el ajuste de los modelos se descartaron algunas de las covariables (no interesantes para modelar la accidentalidad) y se realizaron cambios al formato de los datos (Las modificaciones realizadas y los pasos para construir el conjunto de datos que se utiliza aqui pueden ser consultados en detalle  [aqui](https://geomedellin-m-medellin.opendata.arcgis.com/search?tags=movilidad)). En sintesis, se limitó el estudio a las 16 comunas del área metropolitana de Medellín, (descartandose aquellos accidentes ocurridos en corregimientos), se omitieron covariables relativas a la georreferenciación y se agruparon los registros por comunas en periodos mensuales, para obtener la cantidad de accidentes ocurridos distinguidos por su clase.
+
+A continuación se carga el conjunto de datos:
+
+```{r}
+data_men_all <- read.csv("Datasets/base_mensual_barrios_y_comunas.csv", encoding='UTF-8')
+
+#data_men_all %<>%  filter(!(BARRIO == "Inst"))
+
+data_men_all[,c(2,3,4)] %<>% lapply(function(x) factor(as.character(x)))
+
+data_men_all$FECHA <- paste(data_men_all$PERIODO, data_men_all$MES, 1, sep="-") %>% ymd() %>% as.Date()
+
+data_men_all$FECHA <- paste(data_men_all$PERIODO, data_men_all$MES, sep="-") %>% as.yearmon("%Y-%m")
+
+# Para obtener la inversa se usaría: zoo::as.Date(data_men_all$FECHA, origin="2014-01-01")
+data_men_all$t <- as.numeric(as.Date(data_men_all$FECHA, frac=0.5)) - as.numeric(as.Date("2014-01-01")) #la primera fecha será 0
+
+data_men_all$MES <- factor(months(data_men_all$FECHA), levels =month.name[1:12])
+
+
+
+data_men_comunas <- data_men_all %>% group_by(COMUNA, PERIODO, MES,FECHA, t) %>%
+  summarise(nro.accidentes = sum(nro.accidentes), 
+            Atropello = sum(Atropello), 
+            Caida.Ocupante = sum(Caida.Ocupante),
+            Choque=sum(Choque),
+            Volcamiento = sum(Volcamiento),
+            Otro = sum(Otro))
+
+
+## Organización de bases de datos en formato apto para gráficar.
+
+
+tidy_data_men_all <- tidyr::gather(data_men_all, "CLASE", "nro.accidentes", 5:9)
+
+tidy_data_men_all_comunas <- tidy_data_men_all%>% group_by(COMUNA, t, CLASE) %>%
+  summarise(nro.accidentes = sum(nro.accidentes))
+
+## Param brms
+data_men_comunas$Accidentalidad <- with(data_men_comunas, cbind(Atropello, Caida.Ocupante, Choque, Volcamiento, Otro))
+```
+
+
+Los datos definitivos poseen los siguientes  atributos:
+
+- COMUNA: las 16 comunas del área metropolitana con niveles 'Aranjuez', 'Belén', 'Buenos Aires', 'Castilla', 'Doce de Octubre', 'El Poblado', 'Guayabal', 'La América', 'La Candelaria', 'Laureles Estadio', 'Manrique', 'Popular', 'Robledo', 'San Javier', 'Santa Cruz', 'Villa Hermosa'.
+
+- BARRIO: los barrios de cada comuna con 265 niveles.
+
+- PERIODO: año en que 
+
+- MES: con niveles 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'.
+
+- FECHA: en formato "YY/MM".
+
+- t: tiempo transcurrido, una conversión numerica de la FECHA para agregar en el modelo, equivalente al número de días transcurridos desde la fecha de referencia (equivalente a 0) 2014/01/01 y construye las demás como la mitad del MES.
+
+- Accidentalidad: variable respuesta, numero de accidentes según tipo de categoría.
+
+  * Atropello: numero de accidentes de esta categoría de accidentes.
+  
+  * Caida.Ocupante: numero de accidentes de esta categoría de accidentes.
+  
+  * Choque: numero de accidentes de esta categoría de accidentes.
+  
+  * Incendio: numero de accidentes de esta categoría de accidente.
+  
+  * Volcamiento: numero de accidentes de esta categoría de accidentes.
+  
+  * Otra: numero de accidentes de esta categoría de accidentes.
+
+- nro.accidentes: total de accidentes, suma de todas las categorías. Variable respuesta.
+
+
+# Análisis descriptivo 
+
+```{r}
+temp <- data_men_comunas %>% group_by(FECHA) %>% 
+  summarise(nro.accidentes = sum(nro.accidentes))
+ts_monthly <- ts(temp$nro.accidentes, start=c(2014,1),frequency=12)
+plot(ts_monthly)
+```
+
+```{r}
+plot(decompose(ts_monthly)$trend,ylim=c(min(ts_monthly),max(ts_monthly)), ylab = "accidentes")
+```
+
+
+```{r}
+temp <- data_men_comunas %>% group_by(COMUNA) %>% 
+  summarise(nro.accidentes = sum(nro.accidentes),
+            Atropello = sum(Atropello), 
+            Caida.Ocupante = sum(Caida.Ocupante),
+            Choque=sum(Choque),
+            Volcamiento = sum(Volcamiento),
+            Otro = sum(Otro))
+
+
+temp[order(temp$nro.accidentes, decreasing=T),] %>% kable(align = "c",full_width = F, booktabs = T)%>%
+  kable_styling(bootstrap_options = c("striped", "condensed"))
+
+```
+
+
+
+```{r, echo=F, fig.height = 15, fig.width=10}
+plot_nro_acc <- ggplot(aes(x = (t), y = log(nro.accidentes)), data = data_men_comunas) +
+  geom_point( fill = "goldenrod4") +
+  theme_bw() + 
+  geom_line()+
+  facet_wrap(~ COMUNA, ncol = 2)+
+  scale_x_continuous( breaks = data_men_comunas$t[seq(from=1, to = 13*5, by =12)], 
+      labels = data_men_comunas$FECHA[seq(from=1, to = 13*5, by =12)])
+
+plot_nro_acc + theme(axis.text.y = element_text(size=13))
+```
+
+```{r, echo=F, fig.height = 20, fig.width=10}
+group.colors <- RColorBrewer::brewer.pal(5, "Set2")
+
+ggplot(aes(x = t, y = log(nro.accidentes), color = CLASE), data = tidy_data_men_all_comunas) +
+  geom_point(aes(fill = CLASE, colour = CLASE)) +
+  theme_bw() +
+  scale_colour_manual(values=group.colors)+
+#  scale_y_log10() + 
+ # scale_x_date(date_labels = "%m-%Y")+
+  geom_line()+
+  facet_wrap(~ COMUNA, ncol = 2)+
+  scale_x_continuous( breaks = data_men_comunas$t[seq(from=1, to = 13*5, by =12)], 
+      labels = data_men_comunas$FECHA[seq(from=1, to = 13*5, by =12)])+
+  guides(fill = guide_legend(title.position = "top",
+                             label.position = "bottom",
+                             nrow = 1)) + theme(legend.position = "top")
+```
+
+
+```{r, echo=F, fig.height = 20, fig.width=10}
+
+p <- ggplot(tidy_data_men_all_comunas, 
+            aes(x = log(nro.accidentes))) +
+  geom_density(position = "stack", alpha=.5, col = "goldenrod4", fill="gold") +
+  facet_wrap(~ COMUNA, ncol=2)+
+  theme_bw()
+p#+scale_y_continuous(limits = c(0, 0.4))
+```
+
+
+```{r, echo=F, fig.height = 20, fig.width=10}
+group.colors <- c("gold1", "darkolivegreen3", "turquoise2", "steelblue4", "slateblue4")
+
+p <- ggplot(tidy_data_men_all_comunas, 
+            aes(x = log(nro.accidentes), fill = CLASE)) +
+  geom_density(position = "stack", alpha=.5) +
+  facet_wrap(~ COMUNA, ncol=2)+
+  scale_fill_manual(values=group.colors)+
+  theme_bw() + theme(legend.position = "top")
+p#+scale_y_continuous(limits = c(0, 0.4))
+```
+
+
+```{r, echo=F, fig.height = 7, fig.width=8}
+group.colors <- RColorBrewer::brewer.pal(5, "Set2")
+## Gráfico de proporciones por comuna
+temp <- tidy_data_men_all_comunas%>%group_by(COMUNA, CLASE) %>%
+  summarise(p = sum(nro.accidentes))
+
+ggplot(temp, aes(fill=CLASE, y=p, x=COMUNA)) + 
+    geom_bar(position="fill", stat="identity")+ylab("probabilidad")+
+  scale_fill_manual(values=group.colors[1:5])+
+  theme(axis.text.x = element_text( color = "Black", 
+                           size = 12, angle = 30))
+```
+
+
+
+
+# Modelación y Ajuste 
+
+## Modelo con respuesta Poisson
+
+Se quiere modelar el numero de accidentes $n_{ij}$ por medio de una regresión Poisson utilizando 
+
+$$n_{ij} \sim Poisson(\lambda_{ij})$$
+Se quiere modelar $\lambda_{ij}$ 
+
+
+
+### Modelos propuestos {.tabset}
+
+Con base al análisis descriptivo, se tiene que la tendencia general del modelo tiene que ser modelada a través de un polinomia de alto grado para captar sus cambios de tendencia (inicialmente se considera grado 3). Además, dado que realmente no se notaron tendencias marcadas respecto al numero de accidentes según la comuna, por lo que se descartan modelos con pendiente aleatoria y se restringe a modelo con intercepto aleatorio.
+
+Denotesé:
+
+$$j: Comuna\; (1:16) \\ i: observación\; correspondiente\; a\; un\;mes \; entre \; 2014 \; y \; 2019 \; (1:72)$$
+Adicionalmente se notó una periodicidad anual marcada de los meses,  por lo que para modelarla la variable MES será incluida en los modelos y será expresada como: $$\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk}\;\; donde\;\; MES_{ik} = \left\{ \begin{matrix} 1 \quad si ~ la ~observación ~ij~ está~ en~la~ estación~k  \\ 0 \quad~ otro~caso\end{matrix} \right\}$$
+
+$$k = 1: Febrero, ~ k=2: Marzo, ..., k=10: Noviembre, ~ k=11: Diciembre$$
+
+
+#### Modelo 1
+
+Polinomio de grado 3 en función del tiempo, con estacionalidad según el MEs e intercepto aleatorio:
+
+```{r, include=F}
+
+load("Modelos/comuna_glmer.RData")
+
+```
+
+$$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3t^3+\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk} + b_{0j}$$
+$$b_{0j} \sim N(0, \sigma_{b0})$$
+
+
+#### Modelo 2
+
+Polinomio de grado 4 en función del tiempo, con estacionalidad según el MEs e intercepto aleatorio:
+
+$$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3 t^3+ \beta_4 t^4 +\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk}  + b_{0j}$$
+$$b_{0j} \sim N(0, \sigma_{b0})$$
+
+#### Modelo 3
+
+Polinomio de grado 5 en función del tiempo, con estacionalidad según el MEs e intercepto aleatorio:
+
+$$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3 t^3+ \beta_4 t^4+ \beta_5 t^5 +\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk} + b_{0j}$$
+
+$$b_{0j} \sim N(0, \sigma_{b0})$$
+
+#### Modelo 4
+
+Polinomio de grado 6 en función del tiempo, con estacionalidad según el MEs e intercepto aleatorio:
+
+$$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3 t^3+ \beta_4 t^4 + \beta_5 t^5 + \beta_6 t^6 +\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk}+ b_{0j}$$
+
+$$b_{0j} \sim N(0, \sigma_{b0})$$
+
+
+
+### Ajuste con R
+
+Se realiza el ajuste de los modelos por medio de la función `glmer` de la libreria `lme4`, añadiendo el atributo `family= poisson()` para modelar la respuesta Poisson.
+
+```{r, echo= t, results='hide', eval = F}
+## glmer attempts
+
+##Modelo1
+mod1 <- glmer(nro.accidentes ~ poly(t, 3)+MES+ (1|COMUNA),
+            data = data_men_comunas, family= poisson())
+##Modelo2
+mod2 <- glmer(nro.accidentes ~ poly(t, 4)+MES+ (1|COMUNA),
+            data = data_men_comunas, family= poisson())
+##Modelo3
+mod3 <- glmer(nro.accidentes ~ poly(t, 5)+MES+ (1|COMUNA),
+            data = data_men_comunas, family= poisson())
+##Modelo4
+mod4 <- glmer(nro.accidentes ~ poly(t, 6)+MES+ (1|COMUNA),
+            data = data_men_comunas, family= poisson())
+
+
+# Guardado de los modelos
+save(mod1, mod2, mod3, mod4, mod5, mod6, mod7, mod8, file = "Modelos/comuna_glmer.RData")
+
+```
+
+
+
+### Comparación de modelos por medio de la prueba de razón de verosimilitud {.tabset}
+
+En esta sección se elegirá uno de los modelos mostrados anteriormente, probando la significancia de los parámetros añadidos por medio del test de razón de verosimilitud. Considerese dos modelos: $ModeloA$ y $ModeloB$, con vectores de parámetros $\theta^A$ y $\theta^B$ respectivamente, que cumplen $\theta^A \subset \theta^B$. Denotemos a los parámetros del $ModeloB$ que no estan es el $ModeloA$ como $\theta^c$ un vector de dimensión $p$, entonces la prueba de hipótesis asociada a la significancia de estos parámetros será:
+
+$$H_0: \theta^c = 0_{1\times p} \quad v.s \quad H_1: \theta^c \not= 0_{1\times p}$$
+
+Cuyo estadístico de prueba es:
+
+$$LR = -2 \times (loglikelihood(ModeloA)- loglikelihood(ModeloB))$$
+
+A un nivel de significancia $\alpha$ se rechaza $H_0$ si $VP =P(\chi^2_p > LR) < \alpha$
+
+
+Esa prueba se dice es anti-conservativa, es decir que su $VP$ suelen ser más pequeños de lo normal, por lo que usualmente se utiliza en lugar de $\chi^2_p$, la distribución muestral del estadístico la cual puede ser estimada por métodos de remuestreo. Sin embargo, dada la naturaleza de serie de tiempo que tiene el conjunto de datos presentado, utilizar una tecnica de remuestreo no tiene sentido, por lo que en su lugar fijaremos un nivel de significancia más riguroso y por ende más pequeño de lo usual, con $\alpha = 0.01$.
+
+A continuación se presentan las pruebas de hipótesis para cada comparación:
+
+
+#### Modelo 1 v.s Modelo 2
+
+$$H_0: \beta_4 = 0 \quad v.s \quad H_1: \beta_4 \not=0$$
+
+```{r}
+anova(mod1, mod2)
+```
+
+Con un $VP = 2.2e-16 < 0.01$ se rechaza la hipótesis nula y se considera que $\beta_4$ es significativa.
+
+#### Modelo 2 v.s Modelo 3
+$$H_0: \beta_4 = 0 \quad v.s \quad H_1: \beta_4 \not=0$$
+
+```{r}
+anova(mod2, mod3)
+```
+
+Con un $VP =  0.01764 > 0.01$ no se puede rechazar la hipótesis nula al nivel de significancia establecido y se considera que $\beta_4$ es no significativa.
+
+#### Modelo 2 v.s Modelo 4
+
+En este caso se espera que se obtenga el mismo resultado que en la prueba del Modelo 2 v.s Modelo 3, pero igualmente se incluye:
+
+$$H_0: \beta_4 = \beta_5 = 0 \quad v.s \quad H_1: \beta_4 \not=0 ~ | ~  \beta_5 \not=0 $$
+
+```{r}
+anova(mod2, mod4)
+```
+
+Con un $VP =  0.05913 > 0.01$ no se puede rechazar la hipótesis nula al nivel de significancia establecido y se considera que $\beta_4$ y $\beta_5$ son no significativas.
+
+
+
+
+**De las pruebas anteriores se encuentra que el modelo óptimo es el numero 2**, por lo que se procede a realizar un análisis de residuales 
+
+### Evaluación de residuales
+
+Queremos chequear no
+
+
+
+
+```{r echo=F, fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
+modelo_final <- mod2
+## Getting the residuals in a dataframe
+temp <- data.frame(t= data_men_comunas$t,
+                   r= data_men_comunas$nro.accidentes,
+                   y = fitted(modelo_final),
+                   w = residuals(modelo_final, type="pearson"))
+
+## A custom function to create a qqplot
+qqplot.data <- function (vec) # argument: vector of numbers
+{
+  # following four lines from base R's qqline()
+  y <- quantile(vec[!is.na(vec)], c(0.25, 0.75))
+  x <- qnorm(c(0.25, 0.75))
+  slope <- diff(y)/diff(x)
+  int <- y[1L] - slope * x[1L]
+  d <- data.frame(resids = vec)
+
+  ggplot(d, aes(sample = resids)) + stat_qq(shape=21,size=3, fill="lightgoldenrod1")+
+    geom_abline(intercept = 0, slope = 1, color="goldenrod3", size=1)+
+    labs(x = "Cuantiles teóricos", y ="Cuantiles muestrales")+
+    theme_bw()
+
+}
+
+## teo res vs samp res
+res2 <- qqplot.data(residuals(modelo_final, type="pearson"))+
+  coord_cartesian(xlim=c(-2.2,2.8), ylim=c(-2.2,2.8))
+
+## Fitted vs Res
+res3 <- ggplot(data=temp, aes(x=y, y=w)) + 
+  theme_bw()+geom_point(fill="lightgoldenrod1", size=2, shape=21)+
+  labs(x = "Valores ajustados", y ="Residuales estandarizados")+geom_hline(yintercept=c(0,2,-2))+
+  scale_y_continuous(limits = c(-4, 4))
+
+## t vs res
+res4 <- ggplot(data=temp, aes(x=t, y=w)) + 
+  theme_bw()+geom_point(fill="lightgoldenrod1", size=2, shape = 21)+geom_hline(yintercept=c(-2,0,2))+
+  labs(x = "t", y ="Residuales estandarizados")+
+  scale_y_continuous(limits = c(-4, 4))+
+  scale_x_continuous( breaks = data_men_comunas$t[seq(from=1, to = 13*5, by =12)])
+
+## QQplot de los efectos aleatorios
+effects <- data.frame((ranef(modelo_final)))
+res5 <- qqplot.data(effects$condval)+ylab("cuantiles muestales Intercepto aleatorio")+
+  coord_cartesian(xlim=c(-2,2), ylim=c(-2,2))
+
+gridExtra::grid.arrange(res3, res4, res2, res5, ncol=2)
+
+```
+
+
+```{r, include=F}
+## Res density
+res1 <- ggplot(temp, aes(x=w)) + 
+  theme_bw()+geom_density(alpha=.1,  size = 0.5, col="goldenrod3")+
+  labs(x = "Residuales", y ="Densidad")+xlim(-4,4)
+
+```
+
+
+### Expresión del modelo
+
+$$\log (\widehat{\lambda_{ij}}) = 4.9180  -0.1385t + 0.0906t^2 + 0.6405t^3+ 0.9706 t^4 +0.1074MES_{Febrero}+\\0.1680MES_{marzo}+0.1287MES_{Abril}+0.1924MES_{Mayo}+0.1126MES_{Junio}+\\ 0.1855MES_{Julio}+0.2369MES_{Agosto}+ 0.2147MES_{Septiembre}+ 0.2028MES_{Octubre}+\\0.1274MES_{Noviembre}+0.1641MES_{Diciembre} + b_{0j}$$
+
+
+Los valores estimados de $b_{0j}$ se muestran a continuación:
+
+```{r, echo=F}
+temp <- ranef(modelo_final)[[1]]
+temp$Comuna <- row.names(temp)
+temp$j <-1:16
+temp$b0 <- temp$`(Intercept)`
+temp <- temp[,c(3,2,4)]
+row.names(temp) <- NULL
+temp%>% kable(align = "c",full_width = F, booktabs = T)%>%
+  kable_styling(bootstrap_options = c("striped", "condensed"))
+```
+
+
+Y con  $\widehat{\sigma^2_{b0}} = 0.5765$
+
+### Modelo Ajustado {.tabset}
+A continuación se muestra el modelo ajustado sobre los datos reales para cada una de las 16 comunas de área metropolitana:
+
+```{r, echo=F}
+##Añadiendo valores ajustados
+data_men_comunas$fit <- fitted(modelo_final)
+
+comunas <-levels(data_men_comunas$COMUNA)
+adjusts <- list()
+data_men_comunas
+j <- 1
+for(i in comunas){
+  fitted_plot <- ggplot(aes(x = (t), y = log(nro.accidentes)), 
+                        data = filter(data_men_comunas, COMUNA==i)) +
+    geom_point( fill = "goldenrod4") +
+    theme_bw() + 
+    geom_line()+
+    scale_x_continuous( breaks = data_men_comunas$t[seq(from=1, to = 13*5, by =12)], 
+        labels = data_men_comunas$FECHA[seq(from=1, to = 13*5, by =12)])+ 
+    geom_line(size = 1, aes(y = log(fit)), colour="red")
+  adjusts[[j]] <- fitted_plot
+  j <- j+1
+}
+```
+
+#### Aranjuez
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[1]]
+```
+
+#### Belén
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[2]]
+```
+
+#### Buenos Aires
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[3]]
+```
+
+#### Castilla
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[4]]
+```
+
+#### Doce de Octubre
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[5]]
+```
+
+#### El Poblado
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[6]]
+```
+
+#### Guayabal
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[7]]
+```
+
+#### La América
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[8]]
+```
+
+#### La Candelaria
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[9]]
+```
+
+#### Laureles Estadio
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[10]]
+```
+
+#### Manrique
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[11]]
+```
+
+#### Popular
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[12]]
+```
+
+#### Robledo
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[13]]
+```
+
+#### San Javier
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[14]]
+```
+
+#### Santa Cruz
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[15]]
+```
+
+#### Villa Hermosa
+```{r, echo=F, fig.height = 5, fig.width=8}
+adjusts[[16]]
+```
+
+
+
+
+## Modelo con respuesta Multinomial
+
+Para modelar la cantidad de accidentes según la clase consideraremos una regresión con respuesta multinomial (Diferente a la regresión logística Multinomial usada para clasificación). Sean:
+
+$$o = Atropello,\;\; p = Caida.Ocupante,\;\; q = Choque,\;\; r = Volcamiento,\;\; s = Otro \\ j: Comuna\; (1:16) \\ i: observación\; correspondiente\; a\; un\;mes \; entre \; 2014 \; y \; 2019 \; (1:72)$$
+
+Ell vector de Accidentalidad $y_{i,j}$:
+
+$$y_{i,j} = (y_{i,j}^o, y_{i,j}^p, y_{i,j}^q, y_{i,j}^r, y_{i,j}^s)$$
+
+Con un total de accidentes (nro.accidentes) dado por:
+$$n_{ij} = y_{i,j}^o + y_{i,j}^p + y_{i,j}^q + y_{i,j}^r + y_{i,j}^s$$
+
+Y $\theta_{ij}$ el vector de probabilidad según la clase del accidente.
+
+$$\theta_{ij} = (\theta_{ij}^o, \theta_{ij}^p,\theta_{ij}^q, \theta_{ij}^r, \theta_{ij}^s)$$
+
+
+Para ajustar nuestro modelo consideraremos que:
+
+$$y_{ij}|\theta_{ij} \sim Multinomial(n_{ij}, \theta_{ij})$$
+
+
+$$\theta_i = Softmax(0, \mu_j^p,\mu_j^q, \mu_j^r, \mu_j^s)$$
+
+Entonces, nuestro objetivo es modelar $\mu_j^p,\mu_j^q, \mu_j^r, \mu_j^s$ incluyendo covariables 
+
+### Ajuste de modelos
+Se consideran polinomios de grado 3 y superior para el modelamiento
+
+#### Modelo 1:
+
+
+$$\mu_j^p = \beta_0^p + \beta_1^p t + \beta_2^pt^2 + \beta^p_3 t^3 + b^p_{0j}$$
+$$\mu_j^q = \beta_0^q + \beta_1^q t + \beta_2^qt^2 + \beta^q_3 t^3 + b^q_{0j}$$
+$$\mu_j^r = \beta_0^r + \beta_1^r t + \beta_2^rt^2 + \beta^r_3 t^3 + b^r_{0j}$$
+$$\mu_j^s = \beta_0^s + \beta_1^s t + \beta_2^st^2 + \beta^s_3 t^3 + b^s_{0j}$$
+
+### Evaluación de residuales
+
+
+

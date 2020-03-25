@@ -2,7 +2,9 @@
 title: "CleaningTheData"
 author: "Juan Felipe Múnera"
 date: "3/4/2020"
-output: html_document
+output:
+  html_document:
+    css: Format.css
 ---
 
 ```{r setup, include=FALSE}
@@ -12,6 +14,27 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(dplyr)
 ```
+
+
+- OBJECTID: id de cada registro.
+- X: coordenada.
+- Y: coordenada.
+- RADICADO: código emitido por la secretaría de movilidad de Medellín.
+- FECHA.
+- HORA.
+- DIA.
+- PERIODO: año del siniestro.
+- CLASE: tipo de accidente
+- DIRECCION.
+- DIRECCION_ENC.
+- CBML: Código de ubicación del predio en la ciudad.
+- TIPO_GEOCOD.
+- GRAVEDAD: repercusiones del accidente
+- BARRIO.
+- COMUNA.
+- DISENO: clasificación del lugar del accidente.
+- DIA_NOMBRE.
+- MES.
 
 
 ## Carga bases
@@ -56,7 +79,7 @@ temp <- df_accidentes[df_accidentes$TIPO_GEOCOD!="ZONA RURAL",]
 
 df_accidentes[df_accidentes$GRAVEDAD == "CON MUERTO",]$GRAVEDAD <- "MUERTO"
 
-df_accidentes[df_accidentes$CLASE == "Caida Ocupante" | df_accidentes$CLASE == "Caída de Ocupante",]$CLASE <- "Caída Ocupante"
+df_accidentes[df_accidentes$CLASE == "Caída Ocupante" | df_accidentes$CLASE == "Caída de Ocupante",]$CLASE <- "Caida Ocupante"
 df_accidentes[df_accidentes$CLASE == "",]$CLASE <- "Otro" 
 
 df_accidentes[df_accidentes$CLASE == "Choque " | df_accidentes$CLASE ==
@@ -146,7 +169,7 @@ temp <- tidyr::crossing(temp, data.frame(PERIODO= rep(c(2014:2019), each=12),MES
 
 temp  <- temp %>% mutate(
   Atropello=0,
-  'Caída Ocupante'=0,
+  'Caida Ocupante'=0,
   Choque=0,
   Incendio = 0,
   Otro=0,
@@ -155,7 +178,7 @@ temp  <- temp %>% mutate(
   cod = paste(COMUNA, BARRIO, PERIODO, MES, sep="")
 )
 
-temp <- temp[!(temp$cod %in%df_mens$cod),]
+temp <- temp[!(temp$cod %in% df_mens$cod),]
 ## corrigiendo error random?
 temp$PERIODO2 <- temp$PERIODO; df_mens$PERIODO2  <- df_mens$PERIODO
 
@@ -173,7 +196,13 @@ df_mens_complete <- rbind(df_mens[-c(3,12)], temp[-c(3,12)])
 
 ```{r}
 colnames(df_mens_complete) <- c(colnames(df_mens_complete)[1:10],"PERIODO")
-write.csv(df_mens_complete[c(1:2, 11, 3:10)], file("Datasets/base_mensual_barrios_y_comunas.csv", encoding="UTF-8"),row.names = F)
+
+df_mens_complete$Otro <- df_mens_complete$Otro + df_mens_complete$Incendio
+df_mens_complete <- df_mens_complete[,-7]
+write.csv(df_mens_complete[c(1:2, 10, 3:9)], file("Datasets/base_mensual_barrios_y_comunas.csv", encoding="UTF-8"),row.names = F)
 ```
 
+```{r}
+sum(with(df_mens_complete, nro.accidentes-Volcamiento-Otro-Choque-Atropello) - df_mens_complete$`Caida Ocupante`)
+```
 

@@ -33,7 +33,7 @@ max(epilepsy$period)
 
 ```{r}
 library(tidyverse)
-epilepsy%>% group_by(treatment) %>% summarise(count = n())
+unique(epilepsy[c("treatment", "subject")])%>% group_by(treatment) %>% summarise(count = n())
 ```
 
 ## 6. Haga un dibujo igualito al mostrado abajo para monitorear la evolución de la variable Y en función del periodo X para los pacientes 8, 14, 35, 49. Use colores para diferenciar los pacientes que recibieron Progabide y el placebo.
@@ -82,6 +82,7 @@ pred.mod8 <- predict(mod8, type = "response")
 pred.mod8.2 <- predict(mod8.2, type = "response")
 ```
 
+
 ## 10.
 
 ```{r}
@@ -98,6 +99,19 @@ EL mejor es el modelo 3
 ```{r}
 summary(mod8.2)
 ```
+
+```{r}
+#coef(mod8.2)
+## Efectos fijos
+fixef(mod8.2)
+
+## Obtención de varianzas
+VarCorr(mod8.2)
+
+## Obtención de random-effects
+ranef(mod8.2)
+```
+
 
 $$\log(\widehat{y}) = 1.86491 -0.04349\times x -0.25098\times treatmentProgabide-0.01383 \times treatmentProgabide + $$
 

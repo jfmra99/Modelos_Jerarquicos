@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
+# Carga de librerias
 ```{r}
 library(dplyr)
 library(ggplot2)
@@ -18,91 +18,228 @@ library(magrittr)
 
 library(lme4)
 library(brms)
+library(gamlss)
+library("zoo") ##manejo de fechas
 ```
 
 
-## Datos 
+# Conjunto de datos 
 ```{r}
 data_men_all <- read.csv("Datasets/base_mensual_barrios_y_comunas.csv", encoding='UTF-8')
+
+#data_men_all %<>%  filter(!(BARRIO == "Inst"))
 
 data_men_all[,c(2,3,4)] %<>% lapply(function(x) factor(as.character(x)))
 
 data_men_all$FECHA <- paste(data_men_all$PERIODO, data_men_all$MES, 1, sep="-") %>% ymd() %>% as.Date()
-data_men_all$FECHA_n <- as.numeric(data_men_all$FECHA)
 
-tidy_data_men_all <- tidyr::gather(data_men_all[-11], "CLASE", "nro.accidentes", 5:10)
+data_men_all$FECHA <- paste(data_men_all$PERIODO, data_men_all$MES, sep="-") %>% as.yearmon("%Y-%m")
+
+# Para obtener la inversa se usaría: zoo::as.Date(data_men_all$FECHA, origin="2014-01-01")
+data_men_all$t <- as.numeric(as.Date(data_men_all$FECHA, frac=0.5)) - as.numeric(as.Date("2014-01-01")) #la primera fecha será 0
+
+data_men_all$MES <- factor(months(data_men_all$FECHA), levels =month.name[1:12])
+
+tidy_data_men_all <- tidyr::gather(data_men_all, "CLASE", "nro.accidentes", 5:9)
 ```
 
 ```{r}
 
-data_men_comunas <- data_men_all %>% group_by(COMUNA, PERIODO, MES, FECHA_n) %>%
+data_men_comunas <- data_men_all %>% group_by(COMUNA, PERIODO, MES, t) %>%
+  summarise(nro.accidentes = sum(nro.accidentes), 
+            Atropello = sum(Atropello), 
+            Caida.Ocupante = sum(Caida.Ocupante),
+            Choque=sum(Choque),
+            Volcamiento = sum(Volcamiento),
+            Otro = sum(Otro))
+
+tidy_data_men_all_comunas <- tidy_data_men_all%>% group_by(COMUNA, t, CLASE) %>%
   summarise(nro.accidentes = sum(nro.accidentes))
 
-tidy_data_men_all_comunas <- tidy_data_men_all%>% group_by(COMUNA, FECHA_n, CLASE) %>%
-  summarise(nro.accidentes = sum(nro.accidentes))
+## Param brms
+
+data_men_comunas$Accidentalidad <- with(data_men_comunas, cbind(Atropello, Caida.Ocupante, Choque, Volcamiento, Otro))
+
 ```
 
 
+# Análisis descriptivo
+
 ```{r}
-ggplot(aes(x = (FECHA_n), y = log(nro.accidentes)), data = data_men_comunas) +
+plot_nro_acc <- ggplot(aes(x = (FECHA_n), y = log(nro.accidentes)), data = data_men_comunas) +
   geom_point() +
+  theme_bw() + 
+  scale_y_log10() + 
+ # scale_x_date(date_labels = "%m-%Y")+
+  geom_line()+
+  facet_wrap(~ COMUNA)
+
+plot_nro_acc
+```
+
+```{r}
+group.colors <- RColorBrewer::brewer.pal(5, "Set2")
+ggplot(aes(x = (FECHA_n), y = log(nro.accidentes), color = CLASE), data = tidy_data_men_all_comunas) +
+  geom_point(aes(fill = CLASE, colour = CLASE)) +
   theme_bw() +
+  scale_colour_manual(values=group.colors)+
+#  scale_y_log10() + 
+ # scale_x_date(date_labels = "%m-%Y")+
+  geom_line()+
+  facet_wrap(~ COMUNA)
+
+```
+
+
+# Ajuste de modelos mensual
+
+## A nivel barrial
+
+Modelos:
+
+### Multinomial 
+
+- a = Atropello, b = Caída ocupante, c = Choque, d, = Volcamiento, e = Otro.
+- j: barrio (1:267)
+- i: observación en el barrio (1:72)
+Sea: 
+
+$$y_{i,j} = (y_{i,j}^a, y_{i,j}^b, y_{i,j}^c, y_{i,j}^d, y_{i,j}^e)$$
+$$\theta_j = (\theta_j^a, \theta_j^b,\theta_j^c, \theta_j^d, \theta_j^e)$$
+$$n_{ij} = y_{i,j}^a + y_{i,j}^b + y_{i,j}^c + y_{i,j}^d + y_{i,j}^e$$
+
+Y se tiene que:
+
+$$y_{ij}|\theta_j \sim Multinomial(n_{ij}, \theta_j)$$
+$$\theta_i = Softmax(0, \mu_j^b,\mu_j^c, \mu_j^d, \mu_j^e)$$
+
+- **Modelo 1:**
+
+MULTINOMIAL
+```{r}
+test_Data <- filter(data_men_all, BARRIO %in% c("Aranjuez", "Berlín"), PERIODO %in% c("2014", "2015", "2016", "2017"))
+
+#test_Data$Accidentalidad <- with(test_Data, cbind(Atropello, Caida.Ocupante, Choque, Volcamiento, Otro))
+
+test_Data$Accidentalidad <- with(test_Data, cbind(Atropello, Choque))
+test_Data$nro.accidentes <- with(test_Data, (Atropello+ Choque))
+```
+
+```{r}
+formula1 <- bf(Accidentalidad | trials(nro.accidentes)  ~  poly(t, 2) + MES summary)
+formula2 <- bf(Accidentalidad | trials(nro.accidentes)  ~  poly(t, 3) + MES + (1+t|COMUNA))
+  
+fit2 <- brm(formula1, data = test_Data, family = multinomial(), seed = 314, chains=1)
+#fit2 <- brm(formula2, data = test_Data, family = multinomial(), seed = 314, cores= 4)
+```
+
+```{r}
+## compare models 
+## add_criterion(fit1, criterion = c("kfold"))
+## compare_ic(waic(fit1), waic(fit2))
+```
+
+
+
+
+
+
+
+### Modelo Poisson/
+Ajuster glmer
+
+```{r}
+# BRMS not convincing
+#model <- brm(nro.accidentes ~ poly(FECHA_n, 3) + (1|BARRIO),
+#            data = data_men_all, family = poisson())
+
+if(F){
+
+mod1 <- glmer(nro.accidentes ~ poly(FECHA_n, 3)+MES+ (1|BARRIO),
+            data = data_men_all, family= poisson())
+
+mod2 <- glmer(nro.accidentes ~ poly(FECHA_n, 4)+MES+ (1|BARRIO),
+            data = data_men_all, family= poisson())
+
+mod3 <- glmer(nro.accidentes ~ poly(FECHA_n, 4)+MES+ (1+FECHA_n|BARRIO),
+            data = data_men_all, family= poisson())
+
+mod4 <- glmer(nro.accidentes ~ poly(FECHA_n, 5)+MES+ (1+FECHA_n|BARRIO),
+            data = data_men_all, family= poisson())
+
+save(mod1, mod2, mod3, mod4, file = "Modelos/poisson_glmer.RData")
+
+}
+
+
+load("Modelos/poisson_glmer.RData")
+anova(mod1, mod2, mod3, mod4)
+```
+
+AJuste con gamlss
+
+
+```{r}
+if(F){
+  
+fit1_p <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 2)+ MES + re(random= ~1|BARRIO),
+                    family = ZIP2(),
+                    data = data_men_all)
+fit2_p <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 3)+MES + re(random= ~1|BARRIO),
+                    family = ZIP2(),
+                    data = data_men_all)
+
+fit3_p <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 4)+MES + re(random= ~1|BARRIO),
+                    family = ZIP2(),
+                    data = data_men_all)
+
+fit3_2_p <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 4)+MES + re(random= ~1+FECHA_n|BARRIO),
+                    family = ZIP2(),
+                    data = data_men_all)
+
+save(fit2_p, fit3_p, fit3_2_p, file = "Modelos/ZIP_gamlss.RData")
+}
+
+load("Modelos/ZIP_gamlss.RData")
+
+## GETTING RANDOM EFFECTS 
+#fit1$mu.coefSmo[[1]]$coefficients$random
+
+
+```
+
+
+
+
+
+## gráfica de ajuste
+
+
+```{r}
+temp <- data_men_all
+
+temp$mod1 <- fitted(mod1); temp$mod2 <- fitted(mod2); temp$mod3 <- fitted(mod3)
+temp$mod4 <- fitted(mod4); temp$mod2_p <- fitted(fit2_p)
+temp$mod3_p <- fitted(fit3_p); temp$mod3_2_p <- fitted(fit3_2_p)
+
+plot_nro_acc <- ggplot(aes(x = (FECHA_n), y = (nro.accidentes)), data = temp) +
+#  geom_point() +
+  theme_bw() + 
+#  scale_y_log10() + 
  # scale_x_date(date_labels = "%m-%Y")+
   geom_line()+
   facet_wrap(~ COMUNA)
 ```
 
-```{r}
-ggplot(aes(x = (FECHA_n), y = log(nro.accidentes), col = CLASE), data = tidy_data_men_all_comunas) +
-  geom_point(fill=NA) +
-  theme_bw() +
- # scale_x_date(date_labels = "%m-%Y")+
-  geom_line()+
-  facet_wrap(~ COMUNA)
-```
-
-
-
-## Ajuste
 
 ```{r}
-model <- brm(nro.accidentes ~ poly(FECHA_n, 3) + (1|COMUNA+BARRIO),
-            data = data_men_all, family = poisson())
-
-mod2 <- lmer(nro.accidentes ~ poly(FECHA_n, 3) + (1|COMUNA)+ (1|BARRIO),
-            data = data_men_all)
-```
-
-```{r}
-
-library(gamlss)
-fit2 <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 3) + re(random= ~1|COMUNA),
-                    family = ZIP2(),
-                    data = data_men_all)
-
-fit2$mu.coefSmo[[1]]$coefficients$random
-```
-
-```{r}
-fit3 <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 3) + re(random= ~1|COMUNA/BARRIO),
-                    family = ZIP2(),
-                    data = data_men_all)
-
-fit3$mu.coefSmo[[1]]$coefficients$random
-```
-
-
-```{r}
-fit1 <- gamlss(formula = nro.accidentes ~ poly(FECHA_n, 3) + re(random= ~1|BARRIO),
-                    family = ZIP2(),
-                    data = data_men_all)
-
-fit1$mu.coefSmo[[1]]$coefficients$random
+plot_nro_acc +  geom_line(size = 1, aes(y = mod2), colour="red")
 ```
 
 
 ```{r}
 N <- 15
+set.seed = 3
 dat <- data.frame(
     y1 = rbinom(N, 10, 0.3), y2 = rbinom(N, 10, 0.5), 
     y3 = rbinom(N, 10, 0.7), x = rnorm(N)
@@ -114,8 +251,319 @@ dat$y <- with(dat, cbind(y1, y2, y3))
 #    prior(cauchy(0, 1), "Intercept") +
 #    prior(normal(0, 2), "Intercept", dpar = muy3)
 
-fit <- brm(bf(y | trials(size)  ~ 1, muy2 ~ x), data = dat, 
-                family = multinomial())
+fit <- brm(bf(y | trials(size)  ~ x), data = dat, 
+                family = multinomial(), chains=4, cores=4)
+
+summary(fit)
+
+
 ```
 
 
+## Efectos fijos
+fixef(fit)
+
+## Obtención de varianzas
+VarCorr(fit)
+
+## Obtención de random-effects
+ranef(fit)
+
+##Obtención de la expresión del modelo
+coef(fit)
+
+## Intervalos de confianza
+confint(fit)
+
+## predicciones
+#predict(fit, newdata= data.frame(grupo=c(1,2), x = c(3,5)))
+
+
+
+\begin{align}
+    r  = \frac{1}{n-1} \sum_{i=1}^{n} \frac{(X_i - \bar{X})(Y_i - \bar{Y})}{S_xS_y}
+\end{align}
+
+\begin{equation}
+y = mx+b
+\end{equation}
+
+\begin{equation}
+\tag{numero}
+y = ax^2 + bx + c
+\end{equation}
+
+
+
+#### Modelo 6
+$$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3 t^3+ \beta_4 t^4 + \beta_5 t^5+\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk} + b_{0j} + b_{1j}t+ b_{2j}t^2$$
+
+$$
+\left(\begin{array}
+'b_0 \\ b_1 \\ b_2
+\end{array}\right)
+\sim N
+\begin{pmatrix}
+\sigma_{b0}^2 & \sigma_{b01} & \sigma_{b02} \\
+\sigma_{b01} & \sigma_{b1}^2 & \sigma_{b12} \\
+\sigma_{b02} & \sigma_{b12} & \sigma_{b2}^2
+\end{pmatrix}
+$$
+
+```{r}
+
+
+
+if(F){
+##Modelo5
+mod5 <- glmer(nro.accidentes ~ poly(t, 4)+MES+ (1+t|COMUNA),
+            data = data_men_comunas, family= poisson())
+
+mod6 <- glmer(nro.accidentes ~ poly(t, 4)+MES+ (1+poly(t,2)|COMUNA),
+            data = data_men_comunas, family= poisson())
+
+mod7 <- glmer(nro.accidentes ~ poly(t, 4)+MES+ (1+poly(t,3)|COMUNA),
+            data = data_men_comunas, family= poisson())
+
+mod8 <- glmer(nro.accidentes ~ poly(t, 4)+MES+ (1+poly(t,4)|COMUNA),
+            data = data_men_comunas, family= poisson())
+
+```
+
+
+
+#### Modelo 5
+
+Polinomio de grado 5 en función del tiempo, con estacionalidad según el MEs, intercepto aleatorio y pendiente aleatoria:
+
+$$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3 t^3+ \beta_4 t^4 + b_{0j}+\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk} + b_{1j}t$$
+
+$$
+\left(\begin{array}
+'b_0 \\ b_1
+\end{array}\right)
+\sim N
+\begin{pmatrix}
+\sigma_{b0}^2 & \sigma_{b01} \\
+\sigma_{b01} & \sigma_{b1}^2 
+\end{pmatrix}
+$$
+
+
+<table>
+ <thead>
+  <tr>
+   <th style="text-align:left;"> grpvar </th>
+   <th style="text-align:left;"> term </th>
+   <th style="text-align:left;"> grp </th>
+   <th style="text-align:right;"> condval </th>
+   <th style="text-align:right;"> condsd </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Aranjuez </td>
+   <td style="text-align:right;"> 0.2636229 </td>
+   <td style="text-align:right;"> 0.0081714 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Belén </td>
+   <td style="text-align:right;"> 0.3671174 </td>
+   <td style="text-align:right;"> 0.0077594 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Buenos Aires </td>
+   <td style="text-align:right;"> -0.1857351 </td>
+   <td style="text-align:right;"> 0.0102296 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Castilla </td>
+   <td style="text-align:right;"> 0.7903509 </td>
+   <td style="text-align:right;"> 0.0062796 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Doce de Octubre </td>
+   <td style="text-align:right;"> -0.5037175 </td>
+   <td style="text-align:right;"> 0.0119921 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> El Poblado </td>
+   <td style="text-align:right;"> 0.5952949 </td>
+   <td style="text-align:right;"> 0.0069228 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Guayabal </td>
+   <td style="text-align:right;"> 0.4664752 </td>
+   <td style="text-align:right;"> 0.0073834 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> La América </td>
+   <td style="text-align:right;"> -0.3332942 </td>
+   <td style="text-align:right;"> 0.0110128 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> La Candelaria </td>
+   <td style="text-align:right;"> 1.5235809 </td>
+   <td style="text-align:right;"> 0.0043523 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Laureles Estadio </td>
+   <td style="text-align:right;"> 0.9030769 </td>
+   <td style="text-align:right;"> 0.0059355 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Manrique </td>
+   <td style="text-align:right;"> -0.3896728 </td>
+   <td style="text-align:right;"> 0.0113276 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Popular </td>
+   <td style="text-align:right;"> -1.1441775 </td>
+   <td style="text-align:right;"> 0.0165166 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Robledo </td>
+   <td style="text-align:right;"> 0.3636193 </td>
+   <td style="text-align:right;"> 0.0077730 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> San Javier </td>
+   <td style="text-align:right;"> -0.9528285 </td>
+   <td style="text-align:right;"> 0.0150102 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Santa Cruz </td>
+   <td style="text-align:right;"> -1.2203906 </td>
+   <td style="text-align:right;"> 0.0171578 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> COMUNA </td>
+   <td style="text-align:left;"> (Intercept) </td>
+   <td style="text-align:left;"> Villa Hermosa </td>
+   <td style="text-align:right;"> -0.5422732 </td>
+   <td style="text-align:right;"> 0.0122255 </td>
+  </tr>
+</tbody>
+</table>
+> temp <- (ranef(modelo_final))
+> View(temp)
+> temp <- ranef(modelo_final)[[1]]
+> View(temp)
+> kable(temp)
+<table>
+ <thead>
+  <tr>
+   <th style="text-align:left;">   </th>
+   <th style="text-align:right;"> (Intercept) </th>
+  </tr>
+ </thead>
+<tbody>
+  <tr>
+   <td style="text-align:left;"> Aranjuez </td>
+   <td style="text-align:right;"> 0.2636229 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Belén </td>
+   <td style="text-align:right;"> 0.3671174 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Buenos Aires </td>
+   <td style="text-align:right;"> -0.1857351 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Castilla </td>
+   <td style="text-align:right;"> 0.7903509 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Doce de Octubre </td>
+   <td style="text-align:right;"> -0.5037175 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> El Poblado </td>
+   <td style="text-align:right;"> 0.5952949 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Guayabal </td>
+   <td style="text-align:right;"> 0.4664752 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> La América </td>
+   <td style="text-align:right;"> -0.3332942 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> La Candelaria </td>
+   <td style="text-align:right;"> 1.5235809 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Laureles Estadio </td>
+   <td style="text-align:right;"> 0.9030769 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Manrique </td>
+   <td style="text-align:right;"> -0.3896728 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Popular </td>
+   <td style="text-align:right;"> -1.1441775 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Robledo </td>
+   <td style="text-align:right;"> 0.3636193 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> San Javier </td>
+   <td style="text-align:right;"> -0.9528285 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Santa Cruz </td>
+   <td style="text-align:right;"> -1.2203906 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> Villa Hermosa </td>
+   <td style="text-align:right;"> -0.5422732 </td>
+  </tr>
+</tbody>
+</table>
+
+#### Modelo 2 v.s Modelo 5
+
+Esta es una prueba sobre la pendiente aleatoria añadida:
+
+
+$$H_0: b_1  = 0 \quad v.s \quad H_1: b_1 \not=0 $$
+
+```{r}
+anova(mod2, mod5)
+```
+
+Con un $VP =  2.2e-16 < 0.01$  se  rechaza la hipótesis nula al nivel de significancia establecido y se considera que $b_1$ es significativa. Se podrían considerar modelos con efectos aleatorios adicionales como $b_{2j}t^2$ y $b_{3j}t^3$. Sin embargo, se omite dado el aumento del número de efectos aleatorios que se añadirian, con lo que se obtendría un modelo muy complejo.

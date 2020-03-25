@@ -1,0 +1,139 @@
+---
+title: "Examen"
+author: "Juan Felipe Múnera"
+date: "3/13/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+datos <- foreign::read.dta("hsbdemo.dta")
+```
+
+## 1)
+
+```{r}
+## Nro colegios
+length(unique(datos$cid))
+
+datos %>% group_by(cid) %>% summarise(n = n())
+```
+
+## 2)
+18
+```{r}
+res <- datos %>% group_by(cid) %>% summarise(n = sum(awards))
+```
+
+## 3) 
+```{r}
+datos$gen <- ifelse(datos$female == "female", 1, 0)
+res <- datos %>% group_by(cid) %>% summarise(n = n(), mujeres = sum(gen), hombres = n-mujeres)
+
+filter(res, mujeres==hombres)
+```
+
+## 4)
+Poissson
+
+## 5)
+
+```{r}
+mod1 <- glmer(data = datos, awards ~ 1 + (1|cid), nAGQ=1, family = poisson)
+coef(mod1)
+
+
+summary(mod1)
+
+exp(1.4582007377)
+```
+
+## 6)
+
+```{r}
+mod2 <- glmer(data = datos, awards ~ female + (1|cid), nAGQ=1, family = poisson)
+coef(mod2)
+
+1.04772270
+```
+
+## 7)
+
+```{r}
+mod3 <- glmer(data = datos, awards ~ female + math + (1+math|cid), nAGQ=1, family = poisson)
+coef(mod2)
+
+exp( 0.44998485+0.4118031 + 0.004759557*mean(datos$math) )
+
+```
+
+## 8)
+
+```{r}
+mod4 <- glmer(data = datos, awards ~ female + math + read + (1+math|cid), nAGQ=1, family = poisson)
+coef(mod4)
+
+exp( 0.50063430 -0.0012839429*summary(datos$math)[2] -0.01318879*summary(datos$read)[5])
+```
+
+
+## 9)
+
+```{r}
+anova(mod1, mod2, mod3, mod4)
+anova(mod2, mod4)
+```
+
+
+## 10)
+
+```{r}
+library(glmm)
+data(bacteria)
+```
+```{r}
+length(unique(bacteria$ID))
+```
+
+## 11)
+
+```{r}
+bacteria %>% group_by(ID, trt)%>% summarise(n = n()) %>%  group_by(trt)%>% summarise(n = n())
+```
+
+## 12)
+
+```{r}
+bacteria$new_y <- ifelse(bacteria$y == "y", 1, 0) 
+mod <- glmer(data= bacteria, new_y ~ trt + week + (1|ID), family = binomial(), nAGQ=1)
+
+data_pred <- data.frame(week = 8, ID = "Z15", trt = "drug")
+predict(mod, newdata = data_pred, type= "response")
+```
+
+
+## 13)
+
+```{r}
+mod2 <- glmer(data= bacteria, y2 ~ 1+ trt + week + (1+week|ID), family = binomial(), nAGQ=1)
+
+data_pred <- data.frame(week = 12, ID = "Y10", trt = "drug")
+predict(mod2, newdata = data_pred, type= "response")
+```
+
+
+```{r}
+mod2 <- glmer(data= bacteria, y2 ~ 1+ trt + week + (1+week|ID), family = gaussian(), nAGQ=1)
+
+data_pred <- data.frame(week = 12, ID = "Y10", trt = "drug")
+predict(mod2, newdata = data_pred, type= "response")
+```
+
+```{r}
+anova(mod, mod2)
+```
+

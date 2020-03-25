@@ -1,0 +1,33 @@
+## carga datos
+library(HSAUR2)
+data("toenail")
+
+##Grafico por nivel
+library(ggplot2)
+toenail$y <- ifelse(toenail$outcome=="none or mild", 1, 0) 
+
+p5 <- (toenail[toenail$patientID %in% c(1, 3, 21, 383),]) %>% 
+  ggplot(aes(x = time, y = y, col = treatment)) +
+   scale_y_continuous(breaks=c(0,1))+
+  geom_point() +
+  theme_bw() +
+  facet_wrap(~ patientID)
+
+## Ajuste modelo
+library(lme4)
+mod8 <- glmer(y ~ time*treatment + (1+time|patientID), data=toenail, family= binomial, nAGQ=1)
+
+
+## Grid de predicción para dibujar el greáfico para los pacientes 1, 3, 21, 383
+df_pred <- data.frame(time = seq(0,18, length.out=500),# grid para la variable tiempo en el rango de 0 a 18 (notese se repite automaticamente 4 veces para cada paciente)
+               treatment = rep(c("terbinafine", "itraconazole", "terbinafine", "terbinafine"), each=500), #tratamiento de cada paciente 1, 21, 381 = terbinafine, 3 = itraconazole
+               patientID = factor(as.character(rep(c(1, 3, 21, 383), each=500)) # codigo de pacientes
+                                  )
+                               )
+## estimamos la predicción del modelo y la añadimos al grid de predicción
+df_pred$estimate <- predict(mod8, newdata = df_pred, type = "response")
+
+## graficamos nuestro modelo uniendo los puntos del grid.
+p5 + geom_line(data=df_pred, aes(x = time, y = estimate))
+
+## importante tener los mismos nombres en las variables, pero esto debería estar garantizado si te corrio la prediccion
