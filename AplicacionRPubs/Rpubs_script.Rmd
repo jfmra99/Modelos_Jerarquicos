@@ -1,22 +1,22 @@
 ---
-title: "Modelación de la Accidentalidad vehicular del área metropolitana de Medellín por comunas entre los años 2014-2019 a través de regresión multinivel"
+title: "Modelación de la Accidentalidad vehicular para las 16 comunas del área urbana de Medellín entre los años 2014-2019 a través de regresión multinivel"
 author: "Juan Felipe Múnera Vergara"
 date: "3/21/2020"
 output: 
   html_document:
     css: Format.css
     theme: lumen
+    code_download: yes
+    df_print: paged
     toc: true
     toc_float:
       collapsed: false
+    bibliography: bibliography.bib
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
-
-
 
 
 ```{r message=FALSE, warning=FALSE, results = 'hide', include=F}
@@ -37,39 +37,94 @@ library(kableExtra)
 ```
 
 
+# Introducción
+
+Los accidentes de tráfico o accidentes de tránsito son siniestros viales que perturban el funcionamiento normal de una vía, este debe involucrar a un vehículo automotor. Estos sucesos son clasificados según sus repercusiones (su gravedad: solo daños materiales, heridos, muertos, etc.) y su tipo (Choques, atropellos).
+
+
+
+![Atropello](https://raw.githubusercontent.com/jfmra99/Modelos_Jerarquicos/master/AplicacionRPubs/Images/Atropello.gif){height=250px} ![Choque](https://raw.githubusercontent.com/jfmra99/Modelos_Jerarquicos/master/AplicacionRPubs/Images/Choques.gif){height=250px} 
+![Volcamiento](https://raw.githubusercontent.com/jfmra99/Modelos_Jerarquicos/master/AplicacionRPubs/Images/Volcamiento.gif){height=250px}
+
+En este documento se presenta el ajuste del número de accidentes del área Urbana de la ciudad de Medellín en función del tiempo, los datos que se presentaran cumplen con las características de una serie de tiempo, por lo que metodologías aptas para el modelamiento de estas son claras candidatas a la hora de elegir un modelo para explicar el número de accidentes. Sin embargo, se pueden encontrar diferencias significativas en el número de accidentes registrados según divisiones territoriales como barrios o comunas, considerar esto significaría ajustar múltiples modelos, uno para cada división territorial que se considere.
+
+Los modelos mixtos, jerárquicos o multinivel, son una metodología que permite crear un único modelo mientras se diferencia por una variable de agrupamiento, que usualmente representa sujetos u objetos de los que se tienen repetidos registros, permitiendo involucrar efectos aleatorios que cambian de sujeto a sujeto. 
+
+En el presente trabajo se utilizan los modelos multinivel generalizados para ajustar dos modelos: el primero un modelo con respuesta Poisson para en número total de accidentes y el segundo, un modelo Multinomial para el número de accidentes según la clase (este último es tan solo un añadido). Ambos modelos son complementarios, ya que el modelo multinomial requiere de una estimación del total de accidentes para realizar las predicciones de la cantidad de accidentes según la categoría. Se utilizara como variable de agrupamiento las comunas.
+
+Para mejorar la legibilidad del documento se ocultaron algunas lineas de código, pero se facilita la descarga del _rmd_ utilizado para generar el documento en la parte superior, al lado del titulo.
+
 
 # Objetivos
 
-- Construir un modelo predictivo para el numero de accidentes del área Metropolitana de la ciudad de Medellín a nivel comunal en intervalos mensuales, entre los años del 2014-2019 utilizando la reegresión multinivel (conocida también como mode los jerárquicos o mixtos), utilizando los paquetes `lmea4`y `brms` de R.
-- Comprender la forma en que se la accidentalidad se relaciona con el tiempo para las comunas de Medellín.
+- Construir un modelo predictivo para el número de accidentes ocurridos en la ciudad de Medellín a nivel comunal en intervalos mensuales, con base a los datos de años del 2014-2019 utilizando la regresión multinivel (conocida también como modelos jerárquicos o mixtos), utilizando los paquetes `lmea4`y `brms` de R.
+- Comprender la forma en que la accidentalidad se relaciona con el tiempo para las comunas de Medellín.
+
 
 
 # Conjunto de datos:
 
-Los datos análizados en el presente documento se obtienen de la [página](https://geomedellin-m-medellin.opendata.arcgis.com/search?tags=movilidad) del portal [GeoMedellín](https://www.medellin.gov.co/geomedellin/) de la alcaldía de Medellín en su sección de datos abiertos. Corresponden a las bases de "Accidentalidad georreferenciada" entre los años 2014 y 2019, los elemento de dichas bases representa un accidente registrado por la Secretaria de Movilidad de la Alcaldia de Medellín y presentaban una serie de covariables que servian para categorizar el tipo de accidente, el momento de su incidencia y su ubicación georreferenciada.
+Los datos análizados en el presente documento se obtienen de la [página](https://geomedellin-m-medellin.opendata.arcgis.com/search?tags=movilidad) del portal [GeoMedellín](https://www.medellin.gov.co/geomedellin/) de la Alcaldía de Medellín en su sección de datos abiertos. Corresponden a las bases de "Accidentalidad georreferenciada" entre los años 2014 y 2019, los elementos de dichas bases representan un accidente registrado por la Secretaría de Movilidad de la Alcaldía de Medellín y presentan una serie de covariables que sirven para categorizar el tipo de accidente, el momento de su incidencia y su ubicación georreferenciada.
 
-Para el ajuste de los modelos se descartaron algunas de las covariables (no interesantes para modelar la accidentalidad) y se realizaron cambios al formato de los datos (Las modificaciones realizadas y los pasos para construir el conjunto de datos que se utiliza aqui pueden ser consultados en detalle  [aqui](https://geomedellin-m-medellin.opendata.arcgis.com/search?tags=movilidad)). En sintesis, se limitó el estudio a las 16 comunas del área metropolitana de Medellín, (descartandose aquellos accidentes ocurridos en corregimientos), se omitieron covariables relativas a la georreferenciación y se agruparon los registros por comunas en periodos mensuales, para obtener la cantidad de accidentes ocurridos distinguidos por su clase.
+Para el ajuste de los modelos se descartaron algunas de las covariables (no interesantes para modelar la accidentalidad) y se realizaron cambios al formato de los datos (las modificaciones realizadas y los pasos para construir el conjunto de datos que se utiliza aquí pueden ser consultados en detalle  [aquí](https://raw.githubusercontent.com/jfmra99/Modelos_Jerarquicos/master/AplicacionRPubs/CleaningData.Rmd)). En síntesis, se limitó el estudio a las 16 comunas de la ciudad de Medellín (descartándose aquellos accidentes ocurridos en corregimientos), se omitieron covariables relativas a la georreferenciación y se agruparon los registros por barrios en periodos mensuales, para obtener la cantidad de accidentes ocurridos distinguidos por su clase.
 
-A continuación se carga el conjunto de datos:
 
-```{r}
-data_men_all <- read.csv("Datasets/base_mensual_barrios_y_comunas.csv", encoding='UTF-8')
 
-#data_men_all %<>%  filter(!(BARRIO == "Inst"))
+Los datos definitivos poseen los siguientes atributos:
 
+- **COMUNA**: las 16 comunas de Medellín con niveles 'Aranjuez', 'Belén', 'Buenos Aires', 'Castilla', 'Doce de Octubre', 'El Poblado', 'Guayabal', 'La América', 'La Candelaria', 'Laureles Estadio', 'Manrique', 'Popular', 'Robledo', 'San Javier', 'Santa Cruz', 'Villa Hermosa'.
+
+- **BARRIO**: los barrios de cada comuna con 265 niveles.
+
+- **PERIODO**: año en el que ocurren los accidentes.
+
+- **MES**: con niveles 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'.
+
+- **FECHA**: en formato "YY/MM".
+
+- **t**: tiempo transcurrido, una conversión numérica de la FECHA para agregar en el modelo, equivalente al número de días transcurridos desde la fecha de referencia 2014/01/01 hasta el tiempo del registro. Dado que los registros representan periodos mensuales, el tiempo del registro corresponderá a los días transcurridos a la mitad del MES.
+
+- **Accidentalidad**: número de accidentes según tipo de categoría (también llamada CLASE).
+
+  * **Atropello**: número de accidentes de esta categoría de accidentes.
+  
+  * **Caida.Ocupante**: número de accidentes de esta categoría de accidentes.
+  
+  * **Choque**: número de accidentes de esta categoría de accidentes.
+  
+  * **Incendio**: número de accidentes de esta categoría de accidente.
+  
+  * **Volcamiento**: número de accidentes de esta categoría de accidentes.
+  
+  * **Otro**: número de accidentes de esta categoría de accidentes.
+
+- **nro.accidentes**: total de accidentes, suma de los accidentes de todas las categorías. Variable respuesta.
+
+
+```{r, include=F}
+## Carga de conjunto de datos a nivel barrial
+
+#data_men_all <- read.csv("Datasets/base_mensual_barrios_y_comunas.csv", encoding='UTF-8')
+
+url <- "https://raw.githubusercontent.com/jfmra99/Modelos_Jerarquicos/master/AplicacionRPubs/Datasets/base_mensual_barrios_y_comunas.csv"
+data_men_all <- read.csv(url, encoding='UTF-8')
+
+## Verificación de covariables como factor
 data_men_all[,c(2,3,4)] %<>% lapply(function(x) factor(as.character(x)))
 
-data_men_all$FECHA <- paste(data_men_all$PERIODO, data_men_all$MES, 1, sep="-") %>% ymd() %>% as.Date()
-
+## Creación de covariables FECHA y t, en base a las otras covariables
 data_men_all$FECHA <- paste(data_men_all$PERIODO, data_men_all$MES, sep="-") %>% as.yearmon("%Y-%m")
-
-# Para obtener la inversa se usaría: zoo::as.Date(data_men_all$FECHA, origin="2014-01-01")
-data_men_all$t <- as.numeric(as.Date(data_men_all$FECHA, frac=0.5)) - as.numeric(as.Date("2014-01-01")) #la primera fecha será 0
-
+# Modificación de MES a su nombre en inglés
 data_men_all$MES <- factor(months(data_men_all$FECHA), levels =month.name[1:12])
 
+# Para obtener la inversa se usaría: zoo::as.Date(data_men_all$FECHA, origin="2014-01-01")
+data_men_all$t <- as.numeric(as.Date(data_men_all$FECHA, frac=0.5)) - as.numeric(as.Date("2014-01-01"))
+```
 
 
+
+```{r, include=F}
+## Construcción del conjunto de datos a utilizar, conseguido por Comunas.
 data_men_comunas <- data_men_all %>% group_by(COMUNA, PERIODO, MES,FECHA, t) %>%
   summarise(nro.accidentes = sum(nro.accidentes), 
             Atropello = sum(Atropello), 
@@ -77,7 +132,6 @@ data_men_comunas <- data_men_all %>% group_by(COMUNA, PERIODO, MES,FECHA, t) %>%
             Choque=sum(Choque),
             Volcamiento = sum(Volcamiento),
             Otro = sum(Otro))
-
 
 ## Organización de bases de datos en formato apto para gráficar.
 
@@ -87,57 +141,44 @@ tidy_data_men_all <- tidyr::gather(data_men_all, "CLASE", "nro.accidentes", 5:9)
 tidy_data_men_all_comunas <- tidy_data_men_all%>% group_by(COMUNA, t, CLASE) %>%
   summarise(nro.accidentes = sum(nro.accidentes))
 
-## Param brms
-data_men_comunas$Accidentalidad <- with(data_men_comunas, cbind(Atropello, Caida.Ocupante, Choque, Volcamiento, Otro))
 ```
 
 
-Los datos definitivos poseen los siguientes  atributos:
+A continuación se presenta el conjunto de datos:
 
-- COMUNA: las 16 comunas del área metropolitana con niveles 'Aranjuez', 'Belén', 'Buenos Aires', 'Castilla', 'Doce de Octubre', 'El Poblado', 'Guayabal', 'La América', 'La Candelaria', 'Laureles Estadio', 'Manrique', 'Popular', 'Robledo', 'San Javier', 'Santa Cruz', 'Villa Hermosa'.
-
-- BARRIO: los barrios de cada comuna con 265 niveles.
-
-- PERIODO: año en que 
-
-- MES: con niveles 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'.
-
-- FECHA: en formato "YY/MM".
-
-- t: tiempo transcurrido, una conversión numerica de la FECHA para agregar en el modelo, equivalente al número de días transcurridos desde la fecha de referencia (equivalente a 0) 2014/01/01 y construye las demás como la mitad del MES.
-
-- Accidentalidad: variable respuesta, numero de accidentes según tipo de categoría.
-
-  * Atropello: numero de accidentes de esta categoría de accidentes.
-  
-  * Caida.Ocupante: numero de accidentes de esta categoría de accidentes.
-  
-  * Choque: numero de accidentes de esta categoría de accidentes.
-  
-  * Incendio: numero de accidentes de esta categoría de accidente.
-  
-  * Volcamiento: numero de accidentes de esta categoría de accidentes.
-  
-  * Otra: numero de accidentes de esta categoría de accidentes.
-
-- nro.accidentes: total de accidentes, suma de todas las categorías. Variable respuesta.
-
+```{r echo=F, message=FALSE, warning=FALSE, cols.print = 5}
+data_men_comunas
+```
+Se puede ver que se tienen 12 registros por cada año para cada una de las 16 comunas, ya que los datos corresponden a un periodo de 6 años se tienen $12*16*6=1152$ registros.
 
 # Análisis descriptivo 
 
-```{r}
+
+Nuestro objetivo primordial es predecir **nro.accidentes** en función de las covariables temporales, por lo que realizamos el gráfico de la serie de tiempo correspondiente a los accidentes de todas las Comunas juntas:
+
+```{r, echo=T}
+#Accidentalidad conjunta de TODAS las Comunas:
 temp <- data_men_comunas %>% group_by(FECHA) %>% 
   summarise(nro.accidentes = sum(nro.accidentes))
+## SERIE DE TIEMPO para la 
 ts_monthly <- ts(temp$nro.accidentes, start=c(2014,1),frequency=12)
 plot(ts_monthly)
 ```
 
+Las series de tiempo tienen componentes de tendencia y estacionalidad. Este último corresponde a comportamientos que se repiten cada cierto tiempo en la serie, existen gráficos que evaluan que periodicidad (anual, trimestral, semestral etc.) tomar como el periodograma, pero sin necesidad de recurrir a él, del gráfico de la serie presentado anteriormente se pueden notar comportamientos marcados para algunos meses entre el 2014 y el 2018, (por ejemplo, la accidentalidad cae al mínimo principio de cada año en el mes de Enero). En el 2019 se puede intuir que se conservan los comportamientos periódicos, pero parece que ocurre un ciclo que aumento el número de accidentes en el segundo semestre del año. Debido a esto se sospecha que los datos tienen una periodicidad anual, por los que la covariable *MES* es candidata a ser relevanta para el modelamiento del número de accidentes.
+
+La tendencia en cambio, describe comportamiento general de la serie (Restando los periodos). Se puede obtener una forma aproximada de la tendencia de la seria por medio de `decompose`:
+
 ```{r}
 plot(decompose(ts_monthly)$trend,ylim=c(min(ts_monthly),max(ts_monthly)), ylab = "accidentes")
+
 ```
 
+Se puede ver que la tendencia varia entre 3200 y 3600 accidentes, por lo que se puede hablar de una tendencia de crecimiento/decrecimiento marcada. Para modelarla se puede recurrir polinomio del tiempo, dado que se pueden apreciar varias concavidades, un polinomio de grado 3 o 4 debería ser adecuado.
 
-```{r}
+Ahora exploraremos la cantidad de accidentes según la comuna y su CLASE, a continuación se presenta una tabla con el total de accidentes de los 6 años registrados para cada una de las comunas:
+
+```{r, echo=F}
 temp <- data_men_comunas %>% group_by(COMUNA) %>% 
   summarise(nro.accidentes = sum(nro.accidentes),
             Atropello = sum(Atropello), 
@@ -152,6 +193,8 @@ temp[order(temp$nro.accidentes, decreasing=T),] %>% kable(align = "c",full_width
 
 ```
 
+El total de accidentes varía mucho de una comuna a otra, por lo que se sospecha que existen diferencias marcadas entre las Comunas. Esto se puede apreciar mucho mejor en el siguiente gráfico de los accidentes dado el tiempo para cada una de las 16 comunas, en este y los demás gráficos que involucren el conteo de accidentes se utilizará la escala logarítmica, para que la escala permita comparar las diferentes comunas:
+
 
 
 ```{r, echo=F, fig.height = 15, fig.width=10}
@@ -165,6 +208,10 @@ plot_nro_acc <- ggplot(aes(x = (t), y = log(nro.accidentes)), data = data_men_co
 
 plot_nro_acc + theme(axis.text.y = element_text(size=13))
 ```
+
+Se puede ver que efectivamente existe una diferencia en la cantidad de accidentes registrados de una comuna a otra. Esto nos dice que utilizar la *COMUNA* como la variable de agrupamiento, en base al anterior gráfico la adición de un intercepto aleatorio parece razonable, en cambio dado que que no hay diferencias de tendencia marcadas entre las comunas, se descarta la inclusión de una pendiente aleatoria y se considera que el comportamiento es similar entre ellas.
+
+Se puede alcanzar la misma conclusión si se gráfica el número de accidentes haciendo distinción por su clase:
 
 ```{r, echo=F, fig.height = 20, fig.width=10}
 group.colors <- RColorBrewer::brewer.pal(5, "Set2")
@@ -184,6 +231,7 @@ ggplot(aes(x = t, y = log(nro.accidentes), color = CLASE), data = tidy_data_men_
                              nrow = 1)) + theme(legend.position = "top")
 ```
 
+Ahora veremos la densidad muestral de la cantidad de accidentes según las comunas:
 
 ```{r, echo=F, fig.height = 20, fig.width=10}
 
@@ -195,6 +243,9 @@ p <- ggplot(tidy_data_men_all_comunas,
 p#+scale_y_continuous(limits = c(0, 0.4))
 ```
 
+Se puede ver la presencia de diferentes modas, pero esto puede ser explicado por las diferencias del número de accidentes según el mes. Más adelante en el documento, se considerará que el número de accidentes de distribuye $Poisson$, por lo que este gráfico sirve como argumento para considerar que la media esperada dependerá de covariables como el tiempo. Además, se puede ver el cambio de forma de las densidades entre las comunas.
+
+También se presentan las densidades según la CLASE del accidente:
 
 ```{r, echo=F, fig.height = 20, fig.width=10}
 group.colors <- c("gold1", "darkolivegreen3", "turquoise2", "steelblue4", "slateblue4")
@@ -207,6 +258,8 @@ p <- ggplot(tidy_data_men_all_comunas,
   theme_bw() + theme(legend.position = "top")
 p#+scale_y_continuous(limits = c(0, 0.4))
 ```
+
+Nuevamente se puede ver el cambio de forma de las densidades entre las comunas. Lo cual es confirmado al realizar una gráfica de barras de probabilidad:
 
 
 ```{r, echo=F, fig.height = 7, fig.width=8}
@@ -223,39 +276,39 @@ ggplot(temp, aes(fill=CLASE, y=p, x=COMUNA)) +
 ```
 
 
-
+Se puede ver que la proporción de algunas clases de accidente como los Atropellos son notablemente mayores para algunas comunas como _Santa Cruz_ y _Popular_, y en general varían considerablemente entre las comunas. Lo mismo ocurre en los Choques y los accidentes con Caída de Ocupante.  Mientras que otras como los volcamientos los accidentes de clase "Otro" parecen tener una proporción constante entre las comunas. La conclusión general del gráfico es que las proporciones según la clase son afectadas por la variable de agrupamiento *COMUNA*
 
 # Modelación y Ajuste 
 
 ## Modelo con respuesta Poisson
 
-Se quiere modelar el numero de accidentes $n_{ij}$ por medio de una regresión Poisson utilizando 
+Denotaremos el número de accidentes para el tiempo $y$ de la comuna $j$ como $n_{ij}$ y la modelaremos por medio de una regresión Poisson:
 
 $$n_{ij} \sim Poisson(\lambda_{ij})$$
-Se quiere modelar $\lambda_{ij}$ 
+Entonces queremos encontrar una expresión que relacione a $\lambda_{ij}$ con las variables temporales y las comunas.
 
 
 
 ### Modelos propuestos {.tabset}
 
-Con base al análisis descriptivo, se tiene que la tendencia general del modelo tiene que ser modelada a través de un polinomia de alto grado para captar sus cambios de tendencia (inicialmente se considera grado 3). Además, dado que realmente no se notaron tendencias marcadas respecto al numero de accidentes según la comuna, por lo que se descartan modelos con pendiente aleatoria y se restringe a modelo con intercepto aleatorio.
+Con base al análisis descriptivo, se tiene que la tendencia general del modelo tiene que ser modelada a través de un polinomio de alto grado para captar sus concavidades (inicialmente se considera que el grado mínimo debe ser 3). Además, dado que realmente no se notaron tendencias marcadas respecto al número de accidentes según la comuna, se descartan modelos con pendiente aleatoria y se restringe a modelo con intercepto aleatorio.
 
-Denotesé:
+Denótese:
 
 $$j: Comuna\; (1:16) \\ i: observación\; correspondiente\; a\; un\;mes \; entre \; 2014 \; y \; 2019 \; (1:72)$$
-Adicionalmente se notó una periodicidad anual marcada de los meses,  por lo que para modelarla la variable MES será incluida en los modelos y será expresada como: $$\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk}\;\; donde\;\; MES_{ik} = \left\{ \begin{matrix} 1 \quad si ~ la ~observación ~ij~ está~ en~la~ estación~k  \\ 0 \quad~ otro~caso\end{matrix} \right\}$$
+Adicionalmente se notó una periodicidad anual marcada,  por lo que para modelarla la variable MES será incluida en los modelos de la siguiente forma: $$\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk}\;\; donde\;\; MES_{ik} = \left\{ \begin{matrix} 1 \quad si ~ la ~observación ~ij~ está~ en~la~ estación~k  \\ 0 \quad~ otro~caso\end{matrix} \right\}$$
 
 $$k = 1: Febrero, ~ k=2: Marzo, ..., k=10: Noviembre, ~ k=11: Diciembre$$
 
 
 #### Modelo 1
 
-Polinomio de grado 3 en función del tiempo, con estacionalidad según el MEs e intercepto aleatorio:
+Polinomio de grado 3 en función del tiempo, con estacionalidad según el MES e intercepto aleatorio:
 
 ```{r, include=F}
 
-load("Modelos/comuna_glmer.RData")
-
+#load("Modelos/comuna_glmer.RData")
+load(url("https://github.com/jfmra99/Modelos_Jerarquicos/raw/master/AplicacionRPubs/Modelos/comuna_glmer.RData"))
 ```
 
 $$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3t^3+\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk} + b_{0j}$$
@@ -264,14 +317,14 @@ $$b_{0j} \sim N(0, \sigma_{b0})$$
 
 #### Modelo 2
 
-Polinomio de grado 4 en función del tiempo, con estacionalidad según el MEs e intercepto aleatorio:
+Polinomio de grado 4 en función del tiempo, con estacionalidad según el MES e intercepto aleatorio:
 
 $$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3 t^3+ \beta_4 t^4 +\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk}  + b_{0j}$$
 $$b_{0j} \sim N(0, \sigma_{b0})$$
 
 #### Modelo 3
 
-Polinomio de grado 5 en función del tiempo, con estacionalidad según el MEs e intercepto aleatorio:
+Polinomio de grado 5 en función del tiempo, con estacionalidad según el MES e intercepto aleatorio:
 
 $$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3 t^3+ \beta_4 t^4+ \beta_5 t^5 +\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk} + b_{0j}$$
 
@@ -279,7 +332,7 @@ $$b_{0j} \sim N(0, \sigma_{b0})$$
 
 #### Modelo 4
 
-Polinomio de grado 6 en función del tiempo, con estacionalidad según el MEs e intercepto aleatorio:
+Polinomio de grado 6 en función del tiempo, con estacionalidad según el MES e intercepto aleatorio:
 
 $$\log (\lambda_{ij}) = \beta_0 + \beta_1 t + \beta_2t^2 + \beta_3 t^3+ \beta_4 t^4 + \beta_5 t^5 + \beta_6 t^6 +\sum\limits_{k=1}^{11}{\delta_{k}}MES_{ijk}+ b_{0j}$$
 
@@ -289,7 +342,7 @@ $$b_{0j} \sim N(0, \sigma_{b0})$$
 
 ### Ajuste con R
 
-Se realiza el ajuste de los modelos por medio de la función `glmer` de la libreria `lme4`, añadiendo el atributo `family= poisson()` para modelar la respuesta Poisson.
+Se realiza el ajuste de los modelos por medio de la función `glmer` de la libreria `lme4`, añadiendo el atributo `family= poisson()` para modelar la distribución de $n_{ij}$.
 
 ```{r, echo= t, results='hide', eval = F}
 ## glmer attempts
@@ -309,7 +362,7 @@ mod4 <- glmer(nro.accidentes ~ poly(t, 6)+MES+ (1|COMUNA),
 
 
 # Guardado de los modelos
-save(mod1, mod2, mod3, mod4, mod5, mod6, mod7, mod8, file = "Modelos/comuna_glmer.RData")
+save(mod1, mod2, mod3, mod4, file = "Modelos/comuna_glmer.RData")
 
 ```
 
@@ -317,7 +370,7 @@ save(mod1, mod2, mod3, mod4, mod5, mod6, mod7, mod8, file = "Modelos/comuna_glme
 
 ### Comparación de modelos por medio de la prueba de razón de verosimilitud {.tabset}
 
-En esta sección se elegirá uno de los modelos mostrados anteriormente, probando la significancia de los parámetros añadidos por medio del test de razón de verosimilitud. Considerese dos modelos: $ModeloA$ y $ModeloB$, con vectores de parámetros $\theta^A$ y $\theta^B$ respectivamente, que cumplen $\theta^A \subset \theta^B$. Denotemos a los parámetros del $ModeloB$ que no estan es el $ModeloA$ como $\theta^c$ un vector de dimensión $p$, entonces la prueba de hipótesis asociada a la significancia de estos parámetros será:
+En esta sección se elegirá uno de los modelos mostrados anteriormente, probando la significancia de los parámetros añadidos por medio del test de razón de verosimilitud. Considérese dos modelos: $ModeloA$ y $ModeloB$, con vectores de parámetros $\theta^A$ y $\theta^B$ respectivamente, que cumplen $\theta^A \subset \theta^B$. Denotemos a los parámetros del $ModeloB$ que no están es el $ModeloA$ como $\theta^c$ un vector de dimensión $p$, entonces la prueba de hipótesis asociada a la significancia de estos parámetros será:
 
 $$H_0: \theta^c = 0_{1\times p} \quad v.s \quad H_1: \theta^c \not= 0_{1\times p}$$
 
@@ -328,9 +381,9 @@ $$LR = -2 \times (loglikelihood(ModeloA)- loglikelihood(ModeloB))$$
 A un nivel de significancia $\alpha$ se rechaza $H_0$ si $VP =P(\chi^2_p > LR) < \alpha$
 
 
-Esa prueba se dice es anti-conservativa, es decir que su $VP$ suelen ser más pequeños de lo normal, por lo que usualmente se utiliza en lugar de $\chi^2_p$, la distribución muestral del estadístico la cual puede ser estimada por métodos de remuestreo. Sin embargo, dada la naturaleza de serie de tiempo que tiene el conjunto de datos presentado, utilizar una tecnica de remuestreo no tiene sentido, por lo que en su lugar fijaremos un nivel de significancia más riguroso y por ende más pequeño de lo usual, con $\alpha = 0.01$.
+Esa prueba se dice es anti-conservativa, es decir que su $VP$ será más pequeños de lo normal, por lo que usualmente se utiliza en lugar de $\chi^2_p$ la distribución muestral del estadístico, la cual puede ser estimada por métodos de remuestreo. Sin embargo, dada la naturaleza de serie de tiempo que tiene el conjunto de datos presentado, utilizar una técnica de remuestreo no tiene mucho sentido, por lo que en su lugar fijaremos un nivel de significancia más riguroso y por ende más pequeño de lo usual, haciendo $\alpha = 0.01$.
 
-A continuación se presentan las pruebas de hipótesis para cada comparación:
+A continuación, se presentan las pruebas de hipótesis para cada comparación:
 
 
 #### Modelo 1 v.s Modelo 2
@@ -367,13 +420,11 @@ Con un $VP =  0.05913 > 0.01$ no se puede rechazar la hipótesis nula al nivel d
 
 
 
-**De las pruebas anteriores se encuentra que el modelo óptimo es el numero 2**, por lo que se procede a realizar un análisis de residuales 
+**De las pruebas anteriores se encuentra que el modelo óptimo es el numero 2**, por lo que se procede a realizar el análisis de sus residuales.
 
 ### Evaluación de residuales
 
-Queremos chequear no
-
-
+Queremos chequear si se cumplen los típicos supuestos de varianza constante y normalidad de los residuales. Pero además, se evaluará si existe falta de ajuste respecto al tiempo y el supuesto de normalidad de los interceptos aleatorios $$b_{0j} \sim N(0, \sigma_{b0})$$
 
 
 ```{r echo=F, fig.height=9, fig.width=9, message=FALSE, warning=FALSE}
@@ -420,13 +471,17 @@ res4 <- ggplot(data=temp, aes(x=t, y=w)) +
 
 ## QQplot de los efectos aleatorios
 effects <- data.frame((ranef(modelo_final)))
-res5 <- qqplot.data(effects$condval)+ylab("cuantiles muestales Intercepto aleatorio")+
+res5 <- qqplot.data(effects$condval)+ylab("cuantiles muestales de los Interceptos aleatorios")+
   coord_cartesian(xlim=c(-2,2), ylim=c(-2,2))
 
-gridExtra::grid.arrange(res3, res4, res2, res5, ncol=2)
+
+gridExtra::grid.arrange(res3,res4, res2, res5, ncol=2)
 
 ```
 
+Los gráficos de la primera fila, correspondientes a los residuales estandarizados contra los valores ajustados (A) y a los residuales estandarizados contra el tiempo (B), no muestran ningún indicio de heterocedasticidad. los residuales en (B) no tienen ninguna tendencia marcada y se dispersan aleatoriamente, por lo que se considera no hay falta de ajuste del modelo.
+
+En la segunda fila encontramos los qqplot de los residuales estandarizados (C) y de los intervalos aleatorios ajustados (D). De (C) se puede ver que los cuantiles de los residuales se desvían de los cuantiles teóricos, por lo que seguirían una distribución de cola pesada. De (D) no se encuentran evidencias gráficas contundentes contra la normalidad de los interceptos aleatorios.
 
 ```{r, include=F}
 ## Res density
@@ -435,6 +490,14 @@ res1 <- ggplot(temp, aes(x=w)) +
   labs(x = "Residuales", y ="Densidad")+xlim(-4,4)
 
 ```
+
+El `summary()` del modelo se presenta a continuación:
+
+```{r}
+summary(res1)
+```
+
+
 
 
 ### Expresión del modelo
@@ -456,12 +519,12 @@ temp%>% kable(align = "c",full_width = F, booktabs = T)%>%
 ```
 
 
-Y con  $\widehat{\sigma^2_{b0}} = 0.5765$
+Y la estimación de su varianza es: $\widehat{\sigma^2_{b0}} = 0.5765$
 
 ### Modelo Ajustado {.tabset}
 A continuación se muestra el modelo ajustado sobre los datos reales para cada una de las 16 comunas de área metropolitana:
 
-```{r, echo=F}
+```{r, echo=F, include=F}
 ##Añadiendo valores ajustados
 data_men_comunas$fit <- fitted(modelo_final)
 
@@ -568,7 +631,7 @@ adjusts[[16]]
 
 ## Modelo con respuesta Multinomial
 
-Para modelar la cantidad de accidentes según la clase consideraremos una regresión con respuesta multinomial (Diferente a la regresión logística Multinomial usada para clasificación). Sean:
+Como se notó en el análisis descriptivo, existen diferencias en la cantidad de accidentes según la CLASE, por lo que adicional al modelo Poisson, se presenta el ajuste una regresión con respuesta multinomial la cual puede diferenciarse de la más conocida regresión logística Multinomial, que es un método de clasificación, la respuesta multinomial tiene por respuesta conteo en diferentes categorías. Sean:
 
 $$o = Atropello,\;\; p = Caida.Ocupante,\;\; q = Choque,\;\; r = Volcamiento,\;\; s = Otro \\ j: Comuna\; (1:16) \\ i: observación\; correspondiente\; a\; un\;mes \; entre \; 2014 \; y \; 2019 \; (1:72)$$
 
@@ -591,20 +654,88 @@ $$y_{ij}|\theta_{ij} \sim Multinomial(n_{ij}, \theta_{ij})$$
 
 $$\theta_i = Softmax(0, \mu_j^p,\mu_j^q, \mu_j^r, \mu_j^s)$$
 
-Entonces, nuestro objetivo es modelar $\mu_j^p,\mu_j^q, \mu_j^r, \mu_j^s$ incluyendo covariables 
+Entonces, nuestro objetivo es modelar $\mu_j^p,\mu_j^q, \mu_j^r, \mu_j^s$ incluyendo covariables.
 
-### Ajuste de modelos
-Se consideran polinomios de grado 3 y superior para el modelamiento
+Para ajustar el modelo utilizaremos el paquete `brms`de R, que permite ajustar modelo multinivel considerando una gran variedad de distribuciones para la variable respuesta y tiene un gran fundamento en la estadística Bayesiana. Sin embargo, se ha de mencionar que la familia multinomial es relativamente nueva en `brms`, por lo que carece de muchos estadísticos comparativos y metodologías para realizar comparaciones entre modelos o probar la significancia de efectos.
+Un modelo podría ser elegido en base a su capacidad predictiva, realizando métodos de validación cruzada (específicos para series de tiempo), tal y como expone [3]. Sin embargo, `brms` por sus metodologías bayesianas para el ajuste, consume muchos recursos computacionales y consiguientemente, tarda mucho en su ajuste, por lo que calcular múltiples modelos es una tarea larga y tediosa.
 
-#### Modelo 1:
-
-
-$$\mu_j^p = \beta_0^p + \beta_1^p t + \beta_2^pt^2 + \beta^p_3 t^3 + b^p_{0j}$$
-$$\mu_j^q = \beta_0^q + \beta_1^q t + \beta_2^qt^2 + \beta^q_3 t^3 + b^q_{0j}$$
-$$\mu_j^r = \beta_0^r + \beta_1^r t + \beta_2^rt^2 + \beta^r_3 t^3 + b^r_{0j}$$
-$$\mu_j^s = \beta_0^s + \beta_1^s t + \beta_2^st^2 + \beta^s_3 t^3 + b^s_{0j}$$
-
-### Evaluación de residuales
+Dado que el ajuste de este modelo no es el objetivo principal de este documento y es tan solo un añadido que parte de la curiosidad de quien escribe estas palabras, se ajustará un único modelo.
 
 
+### Ajuste del modelo
+
+
+$$\mu_j^p = \beta_0^p + \beta_1^p t + \beta_2^pt^2 + \beta^p_3 t^3 +\sum\limits_{k=1}^{11}{\delta^p_{k}}MES_{ijk}  + b^p_{0j}$$
+$$\mu_j^q = \beta_0^q + \beta_1^q t + \beta_2^qt^2 + \beta^q_3 t^3+\sum\limits_{k=1}^{11}{\delta^q_{k}}MES_{ijk}  + b^q_{0j}$$
+$$\mu_j^r = \beta_0^r + \beta_1^r t + \beta_2^rt^2 + \beta^r_3 t^3+\sum\limits_{k=1}^{11}{\delta^r_{k}}MES_{ijk}  + b^r_{0j}$$
+$$\mu_j^s = \beta_0^s + \beta_1^s t + \beta_2^st^2 + \beta^s_3 t^3 +\sum\limits_{k=1}^{11}{\delta^s_{k}}MES_{ijk} + b^s_{0j}$$
+
+Con $b^p_{0}\sim N(0, \sigma^2_{b^p_{0}})$, $b^q_{0}\sim N(0, \sigma^2_{b^q_{0}})$, $b^r_{0}\sim N(0, \sigma^2_{b^r_{0}})$ y  $b^s_{0}\sim N(0, \sigma^2_{b^s_{0}})$
+
+
+### Código en R:
+El ajuste de este modelo se realizó basado en los ejemplos de [1] y [2].
+Primero se hace necesario indicarle a `brms` cuales son las categorías para las que va a predecir, esto se hace de esta manera:
+
+```{r, include=F}
+#load("Modelos/fit1_brms_multi.RData")
+load(url("https://github.com/jfmra99/Modelos_Jerarquicos/raw/master/AplicacionRPubs/Modelos/fit1_brms_multi.RData"))
+```
+
+```{r}
+data_men_comunas$Accidentalidad <- with(data_men_comunas, cbind(Atropello, Caida.Ocupante, Choque, Volcamiento, Otro))
+```
+
+Luego el modelo es ajustado utilizando:
+```{r, eval=FALSE}
+formula1 <- bf( Accidentalidad | trials(nro.accidentes) ~ poly(t, 3) + MES + (1 | COMUNA))
+fit1 <- brm(formula1, data = test_Data, family = multinomial(), seed = 314, cores= 4)
+```
+
+### Expresión del modelo estimado
+
+$$\widehat{\mu^p} =  -0.17 +1.53 t -0.45 t^2 -1.30 t^3 -0.04 MES_{February} + 0.06 MES_{March}\\ + 0.02 MES_{April} +0.10MES_{May}  -0.05MES_{June} + 0.01MES_{July} +0.15MES_{August} + 0.08MES_{September}\\ + 0.03MES_{October} +0.09MES_{November}  -0.04MES_{December} + b^p_{0}$$
+
+$$\widehat{\mu^q} =   3.25 -1.81 t -1.81 t^2 -1.04 t^3 +0.07 MES_{February} - 0.00 MES_{March}\\ + 0.08 MES_{April} +0.08 MES_{May}  +0.02MES_{June} + 0.05 MES_{July} +0.06MES_{August} + 0.04 MES_{September}\\ + 0.06 MES_{October} + 0.06 MES_{November}  -0.04MES_{December} + b^q_{0}$$
+
+$$\widehat{\mu^r} =  -1.26 -3.82 t +3.91 t^2 +0.07 t^3 -0.04 MES_{February} -0.00 MES_{March}\\ + 0.13 MES_{April} + 0.11 MES_{May}  +0.14 MES_{June} + 0.16 MES_{July} +0.16MES_{August} + 0.12MES_{September}\\ + 0.17MES_{October} +0.17MES_{November}  +0.01MES_{December} + b^r_{0}$$
+
+$$\widehat{\mu^s} =   0.03 +2.43 t -1.67 t^2 + 0.42 t^3 -0.00 MES_{February} - 0.08 MES_{March}\\ -0.05 MES_{April} + 0.06 MES_{May} - 0.00MES_{June} + 0.08MES_{July} +0.05MES_{August} + 0.04MES_{September}\\ + 0.02 MES_{October} - 0.02MES_{November} -0.09MES_{December} + b^p_{0}$$
+
+```{r, include=F}
+summary(fit1)
+```
+
+Con estimación de efectos aleatorios:
+
+```{r}
+ranef(fit1)
+```
+
+Y varianzas de efectos aleatorios estimadas $\widehat{\sigma^2_{b^p_{0}}} = 0.42$ , $\widehat{\sigma^2_{b^q_{0}}} = 0.87$ $\widehat{\sigma^2_{b^r_{0}}} = 0.51$ , $\widehat{\sigma^2_{b^s_{0}}} = 0.48$
+
+# Comentarios generales
+
+- Los modelos mixtos son una herramienta que permite ajustar modelos globales que se caractericen a las particularidades de individuos (en este caso Comunas), lo que permite tener modelos versátiles y precisos para las predicciones.
+
+
+- Una expansión de este trabajo puede ir dirigida a ajustar un modelo en una escala temporal distinta, digamos semanal o diariamente. O utilizar los barrios como la variable de agrupamiento.
+	
+- Enlazar un modelo Poisson para predecir el número total de accidentes y un modelo multinomial para predecir el número de accidentes por cada clase podría proveer de una herramienta útil para tomar planes de acción respecto a la movilidad de la ciudad. Aunque su utilidad inmediata podría verse afectada por el hecho de que la última vez que miré por mi ventana apenas y había vehículos en tránsito, producto de las medidas estatales de aislamiento social.
+
+# Referencias
+
+- [1] Ivan Ukhov (2020). Bayesian inference of the net promoter score via multilevel regression with poststratification. Recuperado de https://blog.ivanukhov.com/2020/02/03/net-promoter.html
+
+- [2] Example with Family Multinomial. Recuperado de https://discourse.mc-stan.org/t/example-with-family-multinomial/8707
+
+- [3] Rob J Hyndman (2016). Cross-validation for time series. Recuperado de https://robjhyndman.com/hyndsight/tscv/
+
+- [4] Freddy Hernández Barajas y Jorge Leonardo López Martínez (2020). Modelos Mixtos con R. https://fhernanb.github.io/libro_modelos_mixtos/
+
+- [5] Paul-Christian Bürkner (2017). brms: An R Package for Bayesian Multilevel Models Using Stan.
+  Journal of Statistical Software, 80(1), 1-28. doi:10.18637/jss.v080.i01
+  
+- [6] Douglas Bates, Martin Maechler, Ben Bolker, Steve Walker (2015). Fitting Linear Mixed-Effects
+  Models Using lme4. Journal of Statistical Software, 67(1), 1-48. doi:10.18637/jss.v067.i01.
 
